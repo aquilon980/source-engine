@@ -1247,7 +1247,8 @@ bool CWeaponCSBase::AllowsIronSight() const
 
 	const ADSWeapon_t *p = ADS_GetWeapon( GetWeaponID() );
 
-	// Old-zoom weapons (aug/sg552) keep their own native right-click zoom.
+	// Old-zoom weapons (aug/sg552) keep their own native right-click zoom, so
+	// they never take the toggle path; UpdateIronSight mirrors their scope.
 	return ( p != NULL && !p->bOldZoomWeapon );
 }
 
@@ -1261,11 +1262,14 @@ void CWeaponCSBase::SetIronSight( bool bOn )
 	if ( m_bIronSight == bOn )
 		return;
 
-	if ( bOn && !AllowsIronSight() )
-		return;
-
 	const ADSWeapon_t *p = ADS_GetWeapon( GetWeaponID() );
 	if ( !p )
+		return;
+
+	// Old-zoom weapons (aug/sg552) are driven by the game's native scope rather
+	// than a right-click toggle, so AllowsIronSight()'s toggle guard doesn't
+	// apply to them (UpdateIronSight calls this to mirror the FOV).
+	if ( bOn && !p->bOldZoomWeapon && !AllowsIronSight() )
 		return;
 
 	m_bIronSight = bOn;
@@ -1291,8 +1295,10 @@ void CWeaponCSBase::SetIronSight( bool bOn )
 	}
 #endif
 
-	// Debounce so a held button can't spin the state.
-	m_flNextSecondaryAttack = gpGlobals->curtime + 0.2f;
+	// Debounce so a held button can't spin the state. The native-zoom mirror
+	// doesn't debounce: it tracks the game's own secondary-attack cooldown.
+	if ( !p->bOldZoomWeapon )
+		m_flNextSecondaryAttack = gpGlobals->curtime + 0.2f;
 }
 
 void CWeaponCSBase::ClearIronSightImmediate()
@@ -1317,10 +1323,32 @@ void CWeaponCSBase::ClearIronSightImmediate()
 
 void CWeaponCSBase::UpdateIronSight()
 {
-	// Leave the sights when the weapon can't hold them any more. A reload takes
-	// the viewmodel over instantly so the reload animation is not interrupted.
-	if ( m_bIronSight )
+	const ADSWeapon_t *pCfg = ADS_GetWeapon( GetWeaponID() );
+
+	if ( pCfg && pCfg->bOldZoomWeapon )
 	{
+		// Old-zoom weapons (aug/sg552) don't toggle their sights: their
+		// right-click is the game's native scope. Mirror that scope so the
+		// sight model comes up while zoomed and drops on unzoom. A reload
+		// drops the sights immediately (no transition) so it doesn't cut the
+		// reload animation, exactly like the normal toggle path.
+		if ( m_bInReload )
+		{
+			if ( m_bIronSight )
+				ClearIronSightImmediate();
+		}
+		else
+		{
+			CCSPlayer *pPlayer = GetPlayerOwner();
+			bool bZoomed = ( pPlayer && pPlayer->GetFOV() != pPlayer->GetDefaultFOV() );
+			SetIronSight( bZoomed );
+		}
+	}
+	else if ( m_bIronSight )
+	{
+		// Leave the sights when the weapon can't hold them any more. A reload
+		// takes the viewmodel over instantly so the reload animation is not
+		// interrupted.
 		if ( m_bInReload )
 			ClearIronSightImmediate();
 		else if ( !AllowsIronSight() )
