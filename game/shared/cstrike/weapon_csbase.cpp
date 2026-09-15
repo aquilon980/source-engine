@@ -59,6 +59,7 @@ ConVar cl_ads_hide_crosshair( "cl_ads_hide_crosshair", "1", FCVAR_ARCHIVE, "Hide
 ConVar cl_ads_move_speed( "cl_ads_move_speed", "0.66", FCVAR_ARCHIVE, "Walk speed scale while sighted (1.0 = unchanged).", true, 0.1f, true, 1.0f );
 ConVar cl_ads_recoil_scale( "cl_ads_recoil_scale", "0.5", FCVAR_ARCHIVE, "Recoil punch scale while sighted (1.0 = unchanged).", true, 0.0f, true, 1.0f );
 ConVar cl_ads_hold( "cl_ads_hold", "1", FCVAR_ARCHIVE, "1 = hold right mouse to aim, 0 = toggle." );
+ConVar cl_ads_freeaim_blend( "cl_ads_freeaim_blend", "0.15", FCVAR_ARCHIVE, "Seconds for free aim to hand the gun to the sights (and back).", true, 0.0f, true, 1.0f );
 
 // Parsed from scripts/ads_weapons.txt (see ADS_ParseConfig below).
 struct ADSWeapon_t
@@ -1271,6 +1272,11 @@ void CWeaponCSBase::SetIronSight( bool bOn )
 	m_bADSSwapped = false;
 	m_flADSSwapTime = gpGlobals->curtime + MAX( p->flSequenceTime, 0.05f );
 
+	// Keep WeaponIdle from grabbing the viewmodel: it sends ACT_VM_IDLE the
+	// moment m_flTimeWeaponIdle elapses, which would cut the ads_in/ads_out
+	// transition short (this is the "hold ADS breaks" bug).
+	m_flTimeWeaponIdle = m_flADSSwapTime + 0.1f;
+
 	// The viewmodel model and its transition are server-owned and networked, so
 	// the client only ever gets one authoritative answer (no prediction flicker).
 #ifndef CLIENT_DLL
@@ -1353,14 +1359,12 @@ void CWeaponCSBase::UpdateIronSight()
 //-----------------------------------------------------------------------------
 // Free aim: weapons that are aimed (guns) may lead the camera; things thrown
 // or swung from the body (grenades, C4, knife) follow the view so their
-// animation and travel match what the player is looking at. Iron sights lock
-// the gun to the view, like a scope.
+// animation and travel match what the player is looking at. Iron sights keep
+// free aim eligible - the player's free-aim sim blends the gun onto the camera
+// while sighted (see c_cs_player.cpp), so shoulders are smooth, not a snap.
 //-----------------------------------------------------------------------------
 bool CWeaponCSBase::AllowsFreeAim() const
 {
-	if ( m_bIronSight )
-		return false;
-
 	switch ( GetWeaponID() )
 	{
 	case WEAPON_C4:

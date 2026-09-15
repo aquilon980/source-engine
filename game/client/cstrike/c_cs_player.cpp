@@ -1573,6 +1573,7 @@ extern ConVar cl_freeaim_cone_yaw;
 extern ConVar cl_freeaim_cone_pitch;
 extern ConVar cl_freeaim_smooth;
 extern ConVar cl_freeaim_recenter;
+extern ConVar cl_ads_freeaim_blend;
 
 static float FreeAimWrapYaw( float y )
 {
@@ -1604,6 +1605,8 @@ static void SimulateFreeAim( C_CSPlayer *pPlayer, float flFrameTime, CUserCmd *p
 		&& !pWeapon->m_bInReload
 		&& pPlayer->GetFOV() == pPlayer->GetDefaultFOV();
 
+	bool bSights = ( pWeapon != NULL && pWeapon->IsIronSighting() );
+
 	if ( !bEligible )
 	{
 		// Weapon follows the camera; keep the state glued to it so re-enabling
@@ -1628,11 +1631,32 @@ static void SimulateFreeAim( C_CSPlayer *pPlayer, float flFrameTime, CUserCmd *p
 		dYaw = 0.0f;
 	}
 
+	float flFrame = clamp( flFrameTime, 0.0f, 0.1f );
+
+	// Iron sights: free aim hands the gun over. The camera tracks the mouse 1:1
+	// (the cone no longer applies) and the weapon slides onto it over
+	// cl_ads_freeaim_blend, so shouldering is smooth and the sights finish dead
+	// on the crosshair - like Insurgency, not an instant snap.
+	if ( bSights )
+	{
+		pPlayer->m_angFreeAimCamera.x = clamp( pPlayer->m_angFreeAimCamera.x + dPitch, -89.0f, 89.0f );
+		pPlayer->m_angFreeAimCamera.y = FreeAimWrapYaw( pPlayer->m_angFreeAimCamera.y + dYaw );
+
+		float fb = 1.0f - expf( -flFrame / MAX( cl_ads_freeaim_blend.GetFloat(), 0.01f ) );
+		pPlayer->m_angFreeAim.x += ( pPlayer->m_angFreeAimCamera.x - pPlayer->m_angFreeAim.x ) * fb;
+		pPlayer->m_angFreeAim.y = FreeAimWrapYaw( pPlayer->m_angFreeAim.y +
+			FreeAimYawDelta( pPlayer->m_angFreeAimCamera.y, pPlayer->m_angFreeAim.y ) * fb );
+		pPlayer->m_angFreeAim.z = 0.0f;
+
+		pCmd->viewangles = pPlayer->m_angFreeAimCamera;
+		pCmd->freeaim_angles = pPlayer->m_angFreeAim;
+		pCmd->freeaim_valid = true;
+		return;
+	}
+
 	pPlayer->m_angFreeAim.x = clamp( pPlayer->m_angFreeAim.x + dPitch, -89.0f, 89.0f );
 	pPlayer->m_angFreeAim.y = FreeAimWrapYaw( pPlayer->m_angFreeAim.y + dYaw );
 	pPlayer->m_angFreeAim.z = 0.0f;
-
-	float flFrame = clamp( flFrameTime, 0.0f, 0.1f );
 
 	// Optional: drift the gun back to the view while the mouse is still. Off by
 	// default (the lead holds, Insurgency-style).
