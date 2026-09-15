@@ -60,7 +60,7 @@ ConVar hud_achievement_count("hud_achievement_count", "5", FCVAR_ARCHIVE, "Max n
 ConVar hud_achievement_count("hud_achievement_count", "8", FCVAR_ARCHIVE, "Max number of achievements that can be shown on the HUD" );
 #endif
 ConVar hud_achievement_glowtime("hud_achievement_glowtime", "2.5", FCVAR_NONE, "Duration of glow effect around incremented achievements" );
-ConVar hud_achievement_tracker("hud_achievement_tracker", "1", FCVAR_NONE, "Show or hide the achievement tracker" );
+ConVar hud_achievement_tracker("hud_achievement_tracker", "0", FCVAR_NONE, "Show or hide the achievement tracker" );
 
 //-----------------------------------------------------------------------------
 // Purpose: 

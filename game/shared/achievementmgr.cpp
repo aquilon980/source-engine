@@ -929,13 +929,8 @@ void CAchievementMgr::AwardAchievement( int iAchievementID )
     // [dwenger] Necessary for sorting achievements by award time
 	pAchievement->OnAchieved();
 
-    // [tj]
-    IGameEvent * event = gameeventmanager->CreateEvent( "achievement_earned_local" );
-    if ( event )
-    {
-        event->SetInt( "achievement", pAchievement->GetAchievementID() );
-        gameeventmanager->FireEventClientSide( event );
-    }
+    // achievements-off tune (see docs/menu-cleanup.md): no unlock popups.
+    // Tracking/saving still happens; nothing is announced.
 
     //=============================================================================
     // HPE_END

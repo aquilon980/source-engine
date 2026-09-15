@@ -1613,13 +1613,8 @@ ConVarRef suitcharger( "sk_suitcharger" );
 				{
 					int nAchievementID = pKeyValues->GetInt( "achievementID" );
 
-					IGameEvent * event = gameeventmanager->CreateEvent( "achievement_earned" );
-					if ( event )
-					{
-						event->SetInt( "player", pPlayer->entindex() );
-						event->SetInt( "achievement", nAchievementID );
-						gameeventmanager->FireEvent( event );
-					}
+					// achievements-off tune: no achievement_earned event
+					// (see docs/menu-cleanup.md).
 
 					pPlayer->OnAchievementEarned( nAchievementID );
 				}

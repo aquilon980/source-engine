@@ -1143,6 +1143,10 @@ void ClientModeShared::FireGameEvent( IGameEvent *event )
 	}
 	else if ( Q_strcmp( "achievement_earned", eventname ) == 0 )
 	{
+		// achievements-off tune: no chat announcement either
+		// (see docs/menu-cleanup.md).
+		return;
+
 		int iPlayerIndex = event->GetInt( "player" );
 		C_BasePlayer *pPlayer = UTIL_PlayerByIndex( iPlayerIndex );
 		int iAchievement = event->GetInt( "achievement" );
