@@ -382,6 +382,10 @@ void CBaseViewModel::SendViewModelMatchingSequence( int sequence )
 #include "ivieweffects.h"
 #endif
 
+#ifdef CSTRIKE_DLL
+extern ConVar cl_freeaim_viewmodel;
+#endif
+
 void CBaseViewModel::CalcViewModelView( CBasePlayer *owner, const Vector& eyePosition, const QAngle& eyeAngles )
 {
 	// UNDONE: Calc this on the server?  Disabled for now as it seems unnecessary to have this info on the server
@@ -425,6 +429,15 @@ void CBaseViewModel::CalcViewModelView( CBasePlayer *owner, const Vector& eyePos
 	{
 		g_ClientVirtualReality.OverrideViewModelTransform( vmorigin, vmangles, pWeapon && pWeapon->ShouldUseLargeViewModelVROverride() );
 	}
+
+#ifdef CSTRIKE_DLL
+	// Free aim: swing the gun to where it is actually pointing. eyeAngles is the
+	// camera; the weapon aim lives on the player.
+	if ( owner && owner->IsLocalPlayer() && cl_freeaim_viewmodel.GetBool() )
+	{
+		vmangles += owner->GetFreeAimOffset();
+	}
+#endif
 
 	SetLocalOrigin( vmorigin );
 	SetLocalAngles( vmangles );

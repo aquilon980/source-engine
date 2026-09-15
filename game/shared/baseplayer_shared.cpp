@@ -9,6 +9,7 @@
 #include "movevars_shared.h"
 #include "util_shared.h"
 #include "datacache/imdlcache.h"
+#include "usercmd.h"
 #if defined ( TF_DLL ) || defined ( TF_CLIENT_DLL )
 #include "tf_gamerules.h"
 #endif
@@ -818,6 +819,92 @@ void CBasePlayer::SetStepSoundTime( stepsoundtimes_t iStepSoundTime, bool bWalki
 Vector CBasePlayer::Weapon_ShootPosition( )
 {
 	return EyePosition();
+}
+
+//-----------------------------------------------------------------------------
+// Free aim (CS:S tactical weapon decoupling)
+//
+// The weapon's aim is its own angle, carried in each usercmd (freeaim_angles)
+// and simulated on the client as a lagging, cone-limited follow of the view.
+// The camera (pl.v_angle / viewangles) stays the view. Every consumer can call
+// GetFreeAimAngles() blindly: it degrades to EyeAngles() whenever the command
+// carries no aim (bots, demos, free aim off, spectator, dead).
+//-----------------------------------------------------------------------------
+#if defined( CSTRIKE_DLL )
+
+ConVar cl_freeaim( "cl_freeaim", "1", FCVAR_ARCHIVE,
+	"1 = weapon aims independently of the view (tactical free aim), 0 = stock CS:S." );
+ConVar cl_freeaim_cone_yaw( "cl_freeaim_cone_yaw", "8", FCVAR_ARCHIVE,
+	"Max horizontal angle (degrees) the weapon may lead the camera in free aim." );
+ConVar cl_freeaim_cone_pitch( "cl_freeaim_cone_pitch", "6", FCVAR_ARCHIVE,
+	"Max vertical angle (degrees) the weapon may lead the camera in free aim." );
+ConVar cl_freeaim_smooth( "cl_freeaim_smooth", "0.05", FCVAR_ARCHIVE,
+	"Seconds the camera takes to be dragged along once the weapon hits the cone." );
+ConVar cl_freeaim_recenter( "cl_freeaim_recenter", "0", FCVAR_ARCHIVE,
+	"When idle, rate at which the gun drifts back to the view (0 = hold the lead, Insurgency-style)." );
+ConVar cl_freeaim_viewmodel( "cl_freeaim_viewmodel", "1", FCVAR_ARCHIVE,
+	"1 = swing the viewmodel to match the weapon aim, 0 = keep it camera-locked." );
+ConVar cl_freeaim_crosshair( "cl_freeaim_crosshair", "1", FCVAR_ARCHIVE,
+	"1 = draw the crosshair at the weapon aim, 0 = draw it at the camera." );
+
+#endif // CSTRIKE_DLL
+
+// Returns the direction the weapon is pointing.
+QAngle CBasePlayer::GetFreeAimAngles()
+{
+#ifdef CSTRIKE_DLL
+	return m_angFreeAim;
+#else
+	return EyeAngles();
+#endif
+}
+
+// Weapon aim relative to the camera: the lead the viewmodel and crosshair use.
+// Client-only (it needs the rendered view's frame).
+#ifdef CLIENT_DLL
+QAngle CBasePlayer::GetFreeAimOffset()
+{
+#ifdef CSTRIKE_DLL
+	QAngle offset = m_angFreeAim - EyeAngles();
+	offset.z = 0.0f;	// roll is not part of the lead
+	return offset;
+#else
+	return vec3_angle;
+#endif
+}
+#endif
+
+// Adopt (or reject) the free aim carried by a usercmd. Called from the server's
+// PlayerRunCommand and from client-side prediction, so both simulate the same
+// weapon direction for a given command. The cone is enforced here as well as on
+// the client, so a modified client cannot point the gun anywhere it likes; the
+// margin absorbs the client's smooth overshoot without ever clipping it.
+void CBasePlayer::SetFreeAimFromCommand( const CUserCmd *ucmd )
+{
+#ifdef CSTRIKE_DLL
+	if ( ucmd && ucmd->freeaim_valid && cl_freeaim.GetBool() && ucmd->freeaim_angles.IsValid()
+		&& IsAlive() && !IsObserver() )
+	{
+		const float flMargin = 15.0f;
+		const float flConePitch = MAX( 0.0f, cl_freeaim_cone_pitch.GetFloat() ) + flMargin;
+		const float flConeYaw = MAX( 0.0f, cl_freeaim_cone_yaw.GetFloat() ) + flMargin;
+
+		float flLeadPitch = clamp( ucmd->freeaim_angles.x - pl.v_angle.x, -flConePitch, flConePitch );
+
+		float flLeadYaw = ucmd->freeaim_angles.y - pl.v_angle.y;
+		while ( flLeadYaw > 180.0f )
+			flLeadYaw -= 360.0f;
+		while ( flLeadYaw < -180.0f )
+			flLeadYaw += 360.0f;
+		flLeadYaw = clamp( flLeadYaw, -flConeYaw, flConeYaw );
+
+		m_angFreeAim.x = clamp( pl.v_angle.x + flLeadPitch, -89.0f, 89.0f );
+		m_angFreeAim.y = pl.v_angle.y + flLeadYaw;
+		m_angFreeAim.z = 0.0f;
+		return;
+	}
+#endif
+	m_angFreeAim = pl.v_angle;
 }
 
 void CBasePlayer::SetAnimationExtension( const char *pExtension )

@@ -31,6 +31,10 @@ extern int GetShellForAmmoType( const char *ammoname );
 // covers every gun (see docs/casual-defaults.md).
 extern ConVar weapon_recoil_scale;
 
+// Defined in game/shared/cstrike/weapon_csbase.cpp; the recoil scale applied
+// while iron sights are up (see docs/ads.md).
+extern ConVar cl_ads_recoil_scale;
+
 #define SHIELD_VIEW_MODEL "models/weapons/v_shield.mdl"
 #define SHIELD_WORLD_MODEL "models/weapons/w_shield.mdl"
 
@@ -157,6 +161,22 @@ public:
 	virtual bool	Holster( CBaseCombatWeapon *pSwitchingTo );
 	virtual void	AddViewmodelBob( CBaseViewModel *viewmodel, Vector &origin, QAngle &angles );
 	virtual	float	CalcViewmodelBob( void );
+
+	// Free aim: can this weapon point off the camera? False for weapons that
+	// are thrown or swung from the body rather than aimed. Reload/zoom are
+	// handled by the player's free aim simulation.
+	virtual bool	AllowsFreeAim() const;
+
+	// Iron sights / ADS (ported from the "ADS (iron sight) Plugin v1.1"
+	// SourceMod plugin). Weapons listed in scripts/ads_weapons.txt can right-click
+	// into a sighted viewmodel; see docs/ads.md.
+	bool	AllowsIronSight() const;
+	bool	IsIronSighting() const { return m_bIronSight; }
+	void	ToggleIronSight();
+	void	SetIronSight( bool bOn );
+	void	ClearIronSightImmediate();
+	void	UpdateIronSight();
+
 	// All predicted weapons need to implement and return true
 	virtual bool	IsPredicted() const;
 
@@ -259,6 +279,11 @@ public:
 	virtual void UpdateAccuracyPenalty();
 
 	CNetworkVar( float, m_fAccuracyPenalty );
+
+	// Iron sights / ADS (ported from the "ADS (iron sight) Plugin v1.1").
+	CNetworkVar( bool, m_bIronSight );
+	bool	m_bADSSwapped;		// zoom viewmodel already swapped in/out this transition
+	float	m_flADSSwapTime;	// curtime at which the transition finishes its model swap
 
 	//=============================================================================
 	// HPE_END

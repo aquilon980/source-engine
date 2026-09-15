@@ -35,6 +35,7 @@
 #include "fx_cs_blood.h"
 #include "c_cs_playerresource.h"
 #include "c_team.h"
+#include "weapon_csbase.h"
 
 #include "history_resource.h"
 #include "ragdoll_shared.h"
@@ -1543,12 +1544,148 @@ void C_CSPlayer::UpdateIDTarget()
 //-----------------------------------------------------------------------------
 // Purpose: Input handling
 //-----------------------------------------------------------------------------
+static void SimulateFreeAim( C_CSPlayer *pPlayer, float flFrameTime, CUserCmd *pCmd );
+
 bool C_CSPlayer::CreateMove( float flInputSampleTime, CUserCmd *pCmd )
 {
 	// Bleh... we will wind up needing to access bones for attachments in here.
 	C_BaseAnimating::AutoAllowBoneAccess boneaccess( true, true );
 
+	SimulateFreeAim( this, flInputSampleTime, pCmd );
+
 	return BaseClass::CreateMove( flInputSampleTime, pCmd );
+}
+
+//-----------------------------------------------------------------------------
+// Free aim (CS:S tactical weapon decoupling).
+//
+// The mouse drives the *weapon*; the camera is dragged along only when the
+// weapon runs out of cone, which is what makes the gun lead the view on a turn
+// and lets it sit off-centre while you keep looking one way.
+//
+// The input layer folds each frame's mouse motion onto the engine angles we
+// wrote last frame (the camera), so (view - lastCamera) is exactly this frame's
+// raw mouse delta. The weapon takes all of it; the camera follows by however
+// much the resulting lead exceeds the cone.
+//-----------------------------------------------------------------------------
+extern ConVar cl_freeaim;
+extern ConVar cl_freeaim_cone_yaw;
+extern ConVar cl_freeaim_cone_pitch;
+extern ConVar cl_freeaim_smooth;
+extern ConVar cl_freeaim_recenter;
+
+static float FreeAimWrapYaw( float y )
+{
+	while ( y > 180.0f )
+		y -= 360.0f;
+	while ( y < -180.0f )
+		y += 360.0f;
+	return y;
+}
+
+// Shortest signed yaw delta from 'from' to 'to', so a wrap never recovers as a
+// full turn's worth of mouse movement.
+static float FreeAimYawDelta( float to, float from )
+{
+	return FreeAimWrapYaw( to - from );
+}
+
+static void SimulateFreeAim( C_CSPlayer *pPlayer, float flFrameTime, CUserCmd *pCmd )
+{
+	C_WeaponCSBase *pWeapon = dynamic_cast<C_WeaponCSBase *>( pPlayer->GetActiveWeapon() );
+
+	bool bEligible = cl_freeaim.GetBool()
+		&& pPlayer->IsAlive()
+		&& !pPlayer->IsObserver()
+		&& !( pPlayer->GetFlags() & FL_FROZEN )
+		&& !pPlayer->IsInAVehicle()
+		&& pWeapon != NULL
+		&& pWeapon->AllowsFreeAim()
+		&& !pWeapon->m_bInReload
+		&& pPlayer->GetFOV() == pPlayer->GetDefaultFOV();
+
+	if ( !bEligible )
+	{
+		// Weapon follows the camera; keep the state glued to it so re-enabling
+		// (reload done, unzoom, respawn) never snaps.
+		pPlayer->m_angFreeAim = pCmd->viewangles;
+		pPlayer->m_angFreeAimCamera = pCmd->viewangles;
+		pCmd->freeaim_angles = pCmd->viewangles;
+		pCmd->freeaim_valid = false;
+		return;
+	}
+
+	float dPitch = pCmd->viewangles.x - pPlayer->m_angFreeAimCamera.x;
+	float dYaw = FreeAimYawDelta( pCmd->viewangles.y, pPlayer->m_angFreeAimCamera.y );
+
+	// A single frame of mouse is never near 90 degrees: anything larger is a
+	// discontinuity (first frame, teleport, fixangle) - resync without a jump.
+	if ( fabs( dPitch ) > 90.0f || fabs( dYaw ) > 90.0f )
+	{
+		pPlayer->m_angFreeAim = pCmd->viewangles;
+		pPlayer->m_angFreeAimCamera = pCmd->viewangles;
+		dPitch = 0.0f;
+		dYaw = 0.0f;
+	}
+
+	pPlayer->m_angFreeAim.x = clamp( pPlayer->m_angFreeAim.x + dPitch, -89.0f, 89.0f );
+	pPlayer->m_angFreeAim.y = FreeAimWrapYaw( pPlayer->m_angFreeAim.y + dYaw );
+	pPlayer->m_angFreeAim.z = 0.0f;
+
+	float flFrame = clamp( flFrameTime, 0.0f, 0.1f );
+
+	// Optional: drift the gun back to the view while the mouse is still. Off by
+	// default (the lead holds, Insurgency-style).
+	float flRecenter = cl_freeaim_recenter.GetFloat();
+	if ( flRecenter > 0.0f && fabs( dPitch ) + fabs( dYaw ) < 0.01f )
+	{
+		float ra = 1.0f - expf( -flFrame * flRecenter );
+		pPlayer->m_angFreeAim.x += ( pPlayer->m_angFreeAimCamera.x - pPlayer->m_angFreeAim.x ) * ra;
+		pPlayer->m_angFreeAim.y = FreeAimWrapYaw( pPlayer->m_angFreeAim.y +
+			FreeAimYawDelta( pPlayer->m_angFreeAimCamera.y, pPlayer->m_angFreeAim.y ) * ra );
+	}
+
+	float flConePitch = MAX( 0.0f, cl_freeaim_cone_pitch.GetFloat() );
+	float flConeYaw = MAX( 0.0f, cl_freeaim_cone_yaw.GetFloat() );
+
+	float flLeadPitch = pPlayer->m_angFreeAim.x - pPlayer->m_angFreeAimCamera.x;
+	float flLeadYaw = FreeAimYawDelta( pPlayer->m_angFreeAim.y, pPlayer->m_angFreeAimCamera.y );
+
+	// Camera position that just clips the lead at the cone.
+	float flTargetCamPitch = pPlayer->m_angFreeAim.x - clamp( flLeadPitch, -flConePitch, flConePitch );
+	float flTargetCamYaw = FreeAimWrapYaw( pPlayer->m_angFreeAim.y - clamp( flLeadYaw, -flConeYaw, flConeYaw ) );
+
+	float flSmooth = cl_freeaim_smooth.GetFloat();
+	float ca = 1.0f;
+	if ( flSmooth > 0.0f )
+		ca = 1.0f - expf( -flFrame / flSmooth );
+
+	pPlayer->m_angFreeAimCamera.x += ( flTargetCamPitch - pPlayer->m_angFreeAimCamera.x ) * ca;
+	pPlayer->m_angFreeAimCamera.y = FreeAimWrapYaw( pPlayer->m_angFreeAimCamera.y +
+		FreeAimYawDelta( flTargetCamYaw, pPlayer->m_angFreeAimCamera.y ) * ca );
+
+	// The easing above softens the cone edge but can overshoot on a flick; cap
+	// the lead so it never runs away (and stays inside what the server accepts).
+	float flSlackPitch = flConePitch + 3.0f;
+	float flSlackYaw = flConeYaw + 3.0f;
+
+	float flPitchLead = pPlayer->m_angFreeAim.x - pPlayer->m_angFreeAimCamera.x;
+	if ( flPitchLead > flSlackPitch )
+		pPlayer->m_angFreeAimCamera.x = pPlayer->m_angFreeAim.x - flSlackPitch;
+	else if ( flPitchLead < -flSlackPitch )
+		pPlayer->m_angFreeAimCamera.x = pPlayer->m_angFreeAim.x + flSlackPitch;
+
+	float flYawLead = FreeAimYawDelta( pPlayer->m_angFreeAim.y, pPlayer->m_angFreeAimCamera.y );
+	if ( flYawLead > flSlackYaw )
+		pPlayer->m_angFreeAimCamera.y = FreeAimWrapYaw( pPlayer->m_angFreeAim.y - flSlackYaw );
+	else if ( flYawLead < -flSlackYaw )
+		pPlayer->m_angFreeAimCamera.y = FreeAimWrapYaw( pPlayer->m_angFreeAim.y + flSlackYaw );
+
+	// viewangles stays the camera (movement, render, server); the weapon aim
+	// rides in the command so the server fires along the same line.
+	pCmd->viewangles = pPlayer->m_angFreeAimCamera;
+	pCmd->freeaim_angles = pPlayer->m_angFreeAim;
+	pCmd->freeaim_valid = true;
 }
 
 //-----------------------------------------------------------------------------

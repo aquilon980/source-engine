@@ -415,6 +415,10 @@ C_BasePlayer::C_BasePlayer() : m_iv_vecViewOffset( "C_BasePlayer::m_iv_vecViewOf
 	m_pCurrentVguiScreen = NULL;
 	m_pCurrentCommand = NULL;
 
+	// Free aim: start glued to the view until the sim says otherwise.
+	m_angFreeAim.Init();
+	m_angFreeAimCamera.Init();
+
 	m_flPredictionErrorTime = -100;
 	m_StuckLast = 0;
 	m_bWasFrozen = false;

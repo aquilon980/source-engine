@@ -880,6 +880,10 @@ void CPrediction::RunCommand( C_BasePlayer *player, CUserCmd *ucmd, IMoveHelper 
 		player->SetLocalViewAngles( ucmd->viewangles );
 	}
 
+	// Free aim: keep the predicted weapon direction in lockstep with the server
+	// so a predicted shot traces exactly where the server will.
+	player->SetFreeAimFromCommand( ucmd );
+
 	// Call standard client pre-think
 	RunPreThink( player );
 

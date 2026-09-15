@@ -54,6 +54,10 @@ public:
 		mousedx = 0;
 		mousedy = 0;
 
+		// Free aim: where the weapon points, decoupled from the camera view.
+		freeaim_angles.Init();
+		freeaim_valid = false;
+
 		hasbeenpredicted = false;
 #if defined( HL2_DLL ) || defined( HL2_CLIENT_DLL )
 		entitygroundcontact.RemoveAll();
@@ -78,6 +82,9 @@ public:
 		random_seed			= src.random_seed;
 		mousedx				= src.mousedx;
 		mousedy				= src.mousedy;
+
+		freeaim_angles		= src.freeaim_angles;
+		freeaim_valid		= src.freeaim_valid;
 
 		hasbeenpredicted	= src.hasbeenpredicted;
 
@@ -111,6 +118,8 @@ public:
 		CRC32_ProcessBuffer( &crc, &random_seed, sizeof( random_seed ) );
 		CRC32_ProcessBuffer( &crc, &mousedx, sizeof( mousedx ) );
 		CRC32_ProcessBuffer( &crc, &mousedy, sizeof( mousedy ) );
+		CRC32_ProcessBuffer( &crc, &freeaim_angles, sizeof( freeaim_angles ) );
+		CRC32_ProcessBuffer( &crc, &freeaim_valid, sizeof( freeaim_valid ) );
 		CRC32_Final( &crc );
 
 		return crc;
@@ -125,6 +134,8 @@ public:
 		upmove = 0.f;
 		buttons = 0;
 		impulse = 0;
+		freeaim_angles = vec3_angle;
+		freeaim_valid = false;
 	}
 
 	// For matching server and client commands for debugging
@@ -154,6 +165,13 @@ public:
 
 	short	mousedx;		// mouse accum in x from create move
 	short	mousedy;		// mouse accum in y from create move
+
+	// Free aim (CS:S tactical weapon decoupling): where the weapon actually
+	// points, independently of viewangles (which stays the camera). Written by
+	// the local client, read by the server for firing and by prediction so both
+	// sides trace the exact same shot.
+	QAngle	freeaim_angles;
+	bool	freeaim_valid;	// false = no free aim this cmd; use viewangles instead
 
 	// Client only, tracks whether we've predicted this command at least once
 	bool	hasbeenpredicted;

@@ -602,6 +602,12 @@ public:
 	const QAngle& GetPunchAngle();
 	void SetPunchAngle( const QAngle &punchAngle );
 
+	// Free aim (CS:S tactical weapon decoupling). Returns pl.v_angle whenever
+	// the current command doesn't carry a weapon aim, so callers can use it
+	// unconditionally.
+	QAngle			GetFreeAimAngles();
+	void			SetFreeAimFromCommand( const CUserCmd *ucmd );
+
 	virtual void DoMuzzleFlash();
 
 	const char *GetLastKnownPlaceName( void ) const	{ return m_szLastPlaceName; }	// return the last nav place name the player occupied
@@ -845,6 +851,10 @@ public:
 
 	// Player data that's sometimes needed by the engine
 	CNetworkVarEmbedded( CPlayerState, pl );
+
+	// Free aim (CS:S tactical weapon decoupling): where the weapon points,
+	// decoupled from pl.v_angle (the camera). Set from each usercmd.
+	QAngle					m_angFreeAim;
 
 	IMPLEMENT_NETWORK_VAR_FOR_DERIVED( m_fFlags );
 

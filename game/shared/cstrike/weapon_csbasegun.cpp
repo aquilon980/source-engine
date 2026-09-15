@@ -146,7 +146,7 @@ bool CWeaponCSBaseGun::CSBaseGunFire( float flCycleTime, CSWeaponMode weaponMode
 	FX_FireBullets(
 		pPlayer->entindex(),
 		pPlayer->Weapon_ShootPosition(),
-		pPlayer->EyeAngles() + 2.0f * pPlayer->GetPunchAngle(),
+		pPlayer->GetFreeAimAngles() + 2.0f * pPlayer->GetPunchAngle(),
 		GetWeaponID(),
 		weaponMode,
 		CBaseEntity::GetPredictionRandomSeed() & 255,

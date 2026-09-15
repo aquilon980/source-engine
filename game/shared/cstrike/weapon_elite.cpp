@@ -210,7 +210,7 @@ void CWeaponElite::PrimaryAttack()
 	FX_FireBullets(
 		pPlayer->entindex(),
 		pPlayer->Weapon_ShootPosition(),
-		pPlayer->EyeAngles() + 2.0f * pPlayer->GetPunchAngle(),
+		pPlayer->GetFreeAimAngles() + 2.0f * pPlayer->GetPunchAngle(),
 		GetWeaponID(),
 		FiringLeft() ? Secondary_Mode : Primary_Mode,
 		CBaseEntity::GetPredictionRandomSeed() & 255,

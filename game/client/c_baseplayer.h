@@ -325,6 +325,12 @@ public:
 	const QAngle& GetPunchAngle();
 	void SetPunchAngle( const QAngle &angle );
 
+	// Free aim (CS:S tactical weapon decoupling). m_angFreeAim is where the
+	// weapon points; EyeAngles()/pl.v_angle stays the camera. When free aim is
+	// inactive it equals EyeAngles(), so every consumer can call it blindly.
+	QAngle			GetFreeAimAngles();
+	QAngle			GetFreeAimOffset();		// gun minus camera (the on-screen lead)
+	void			SetFreeAimFromCommand( const CUserCmd *ucmd );
 	float					GetWaterJumpTime() const;
 	void					SetWaterJumpTime( float flWaterJumpTime );
 	float					GetSwimSoundTime( void ) const;
@@ -414,6 +420,11 @@ public:
 
 	// Data common to all other players, too
 	CPlayerState			pl;
+
+	// Free aim state (local player). m_angFreeAim = gun direction,
+	// m_angFreeAimCamera = smoothed/clamped camera the view follows.
+	QAngle					m_angFreeAim;
+	QAngle					m_angFreeAimCamera;
 
 	// Player FOV values
 	int						m_iFOV;				// field of view

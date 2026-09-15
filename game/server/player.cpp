@@ -569,11 +569,14 @@ CBasePlayer::CBasePlayer( )
 		s_PlayerEdict = NULL;
 	}
 
+	// Free aim: where the weapon points; pl.v_angle stays the camera. Set from
+	// each usercmd (see SetFreeAimFromCommand).
+	m_angFreeAim.Init();
+
 	m_flFlashTime = -1;
 	pl.fixangle = FIXANGLE_ABSOLUTE;
 	pl.hltv = false;
-	pl.replay = false;
-	pl.frags = 0;
+	pl.replay = false;	pl.frags = 0;
 	pl.deaths = 0;
 
 	m_szNetname[0] = '\0';
@@ -3688,7 +3691,11 @@ void CBasePlayer::PlayerRunCommand(CUserCmd *ucmd, IMoveHelper *moveHelper)
 			}
 		}
 	}
-	
+
+	// Free aim: adopt the weapon direction carried by this command (falls back
+	// to pl.v_angle when the command has none, e.g. bots and demos).
+	SetFreeAimFromCommand( ucmd );
+
 	PlayerMove()->RunCommand(this, ucmd, moveHelper);
 }
 

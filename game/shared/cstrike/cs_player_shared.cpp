@@ -728,6 +728,15 @@ void CCSPlayer::KickBack( float up_base, float lateral_base, float up_modifier, 
 	flKickUp *= weapon_recoil_scale.GetFloat();
 	flKickLateral *= weapon_recoil_scale.GetFloat();
 
+	// Iron sights damp the kick (see docs/ads.md).
+	CWeaponCSBase *pADSWeapon = GetActiveCSWeapon();
+	if ( pADSWeapon && pADSWeapon->IsIronSighting() )
+	{
+		float flADS = cl_ads_recoil_scale.GetFloat();
+		flKickUp *= flADS;
+		flKickLateral *= flADS;
+	}
+
 
 	QAngle angle = GetPunchAngle();
 

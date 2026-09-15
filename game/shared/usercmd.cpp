@@ -169,6 +169,21 @@ void WriteUsercmd( bf_write *buf, const CUserCmd *to, const CUserCmd *from )
 		buf->WriteOneBit( 0 );
 	}
 
+	// Free aim: the weapon's own aim, decoupled from the camera. Written only
+	// when the command actually carries one; otherwise the peer keeps using
+	// viewangles (bots, demos, clients with free aim off). Always sent in full
+	// (not delta'd) so a command never inherits a stale aim from an older one.
+	if ( to->freeaim_valid )
+	{
+		buf->WriteOneBit( 1 );
+		buf->WriteFloat( to->freeaim_angles[ 0 ] );
+		buf->WriteFloat( to->freeaim_angles[ 1 ] );
+	}
+	else
+	{
+		buf->WriteOneBit( 0 );
+	}
+
 #if defined( HL2_CLIENT_DLL )
 	if ( to->entitygroundcontact.Count() != 0 )
 	{
@@ -287,6 +302,18 @@ void ReadUsercmd( bf_read *buf, CUserCmd *move, CUserCmd *from )
 	if ( buf->ReadOneBit() )
 	{
 		move->mousedy = buf->ReadShort();
+	}
+
+	// Free aim
+	if ( buf->ReadOneBit() )
+	{
+		move->freeaim_valid = true;
+		move->freeaim_angles[0] = buf->ReadFloat();
+		move->freeaim_angles[1] = buf->ReadFloat();
+	}
+	else
+	{
+		move->freeaim_valid = false;
 	}
 
 #if defined( HL2_DLL )
