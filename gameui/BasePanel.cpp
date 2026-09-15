@@ -1606,13 +1606,15 @@ CGameMenu *CBasePanel::RecursiveLoadGameMenu(KeyValues *datafile)
 		const char *name = dat->GetString("name", label);
 
 		// Never show these, whatever the .res (or a mod) tries to add:
-		// console, server browser, friends, bug report, achievements.
+		// console, server browser, friends, bug report, achievements,
+		// video stress test / benchmark.
 		if ( cmd && (!Q_stricmp( cmd, "OpenConsole" )
 			|| !Q_stricmp( cmd, "OpenServerBrowser" )
 			|| !Q_stricmp( cmd, "OpenFriendsDialog" )
 			|| !Q_stricmp( cmd, "engine bug" )
 			|| !Q_stricmp( cmd, "OpenAchievementsDialog" )
-			|| !Q_stricmp( cmd, "OpenCSAchievementsDialog" )) )
+			|| !Q_stricmp( cmd, "OpenCSAchievementsDialog" )
+			|| !Q_stricmp( cmd, "OpenBenchmarkDialog" )) )
 			continue;
 
 		menu->AddMenuItem(name, label, cmd, this, dat);
