@@ -23,6 +23,9 @@
 extern ConVar r_FadeProps;
 #endif
 
+extern ConVar ragdoll_jointfriction;
+extern ConVar ragdoll_angdamping_scale;
+
 CRagdoll::CRagdoll()
 {
 	m_ragdoll.listCount = 0;
@@ -108,7 +111,7 @@ void CRagdoll::Init(
 	params.forceBoneIndex = forceBone;
 	params.forcePosition.Init();
 	params.pCurrentBones = pCurrentBonePosition;
-	params.jointFrictionScale = 1.0;
+	params.jointFrictionScale = ragdoll_jointfriction.GetFloat();
 	params.allowStretch = false;
 	params.fixedConstraints = bFixedConstraints;
 	RagdollCreate( m_ragdoll, params, physenv );
@@ -134,6 +137,13 @@ void CRagdoll::Init(
 	for ( int i = 0; i < m_ragdoll.listCount; i++ )
 	{
 		g_pPhysSaveRestoreManager->AssociateModel( m_ragdoll.list[i].pObject, ent->GetModelIndex() );
+
+		// Heavier-corpses tune: scale up angular damping so limbs stop
+		// pendulum-swinging and settle fast. Linear damping untouched.
+		float damping, angDamping;
+		m_ragdoll.list[i].pObject->GetDamping( &damping, &angDamping );
+		angDamping *= ragdoll_angdamping_scale.GetFloat();
+		m_ragdoll.list[i].pObject->SetDamping( &damping, &angDamping );
 	}
 
 #if RAGDOLL_VISUALIZE
@@ -262,7 +272,7 @@ void CRagdoll::PhysForceRagdollToSleep()
 }
 
 #define RAGDOLL_SLEEP_TOLERANCE	1.0f
-static ConVar ragdoll_sleepaftertime( "ragdoll_sleepaftertime", "5.0f", 0, "After this many seconds of being basically stationary, the ragdoll will go to sleep." );
+static ConVar ragdoll_sleepaftertime( "ragdoll_sleepaftertime", "3.0f", 0, "After this many seconds of being basically stationary, the ragdoll will go to sleep. Heavier-corpses tune: 3s so bodies settle fast." );
 
 void CRagdoll::CheckSettleStationaryRagdoll()
 {

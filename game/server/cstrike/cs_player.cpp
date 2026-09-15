@@ -3119,6 +3119,11 @@ bool CCSPlayer::HasSecondaryWeapon( void )
 
 bool CCSPlayer::IsInBuyZone()
 {
+	// casual-rules tune: mp_buy_anywhere skips the zone check.
+	// Covers CanPlayerBuy, AutoBuy and Rebuy in one place.
+	if ( mp_buy_anywhere.GetBool() )
+		return !IsVIP();
+
 	return m_bInBuyZone && !IsVIP();
 }
 

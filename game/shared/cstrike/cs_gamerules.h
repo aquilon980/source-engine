@@ -54,6 +54,7 @@ extern ConVar mp_startmoney;
 extern ConVar mp_tkpunish;
 extern ConVar mp_c4timer;
 extern ConVar mp_buytime;
+extern ConVar mp_buy_anywhere;
 extern ConVar mp_freezetime;
 extern ConVar mp_playerid;
 

@@ -35,6 +35,11 @@
 ConVar sv_showimpacts("sv_showimpacts", "0", FCVAR_REPLICATED, "Shows client (red) and server (blue) bullet impact point (1=both, 2=client-only, 3=server-only)" );
 ConVar sv_showplayerhitboxes( "sv_showplayerhitboxes", "0", FCVAR_REPLICATED, "Show lag compensated hitboxes for the specified player index whenever a player fires." );
 
+// soft-recoil tune (see docs/casual-defaults.md): global recoil scale,
+// 1.0 = stock. Applied in CCSPlayer::KickBack, the one choke point every
+// gun's fire kick flows through. Replicated so client and server agree.
+ConVar weapon_recoil_scale( "weapon_recoil_scale", "0.0", FCVAR_REPLICATED | FCVAR_ARCHIVE, "Scales all weapon recoil kick; lower = softer.", true, 0.0, true, 2.0 );
+
 #define	CS_MASK_SHOOT (MASK_SOLID|CONTENTS_DEBRIS)
 
 void DispatchEffect( const char *pName, const CEffectData &data );
@@ -434,6 +439,13 @@ void CCSPlayer::FireBullet(
 
 		lastPlayerHit = ToBasePlayer(tr.m_pEnt);
 
+#ifdef CLIENT_DLL
+		// CS2-style reactive smoke (see docs/smoke-reactive.md): every bullet
+		// segment carves a short-lived tunnel through smoke, hits or misses.
+		extern void ReactiveSmoke_OnBulletSegment( const Vector &vecStart, const Vector &vecEnd );
+		ReactiveSmoke_OnBulletSegment( vecSrc, tr.endpos );
+#endif
+
 		if ( tr.fraction == 1.0f )
 			break; // we didn't hit anything, stop tracing shoot
 
@@ -710,6 +722,11 @@ void CCSPlayer::KickBack( float up_base, float lateral_base, float up_modifier, 
 		flKickUp = up_base + m_iShotsFired*up_modifier;
 		flKickLateral = lateral_base + m_iShotsFired*lateral_modifier;
 	}
+
+	// soft-recoil tune: one scale for every gun. The maxes below
+	// clamp the scaled kick, so full-auto spray shrinks too.
+	flKickUp *= weapon_recoil_scale.GetFloat();
+	flKickLateral *= weapon_recoil_scale.GetFloat();
 
 
 	QAngle angle = GetPunchAngle();

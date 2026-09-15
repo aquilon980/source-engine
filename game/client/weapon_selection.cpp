@@ -20,7 +20,6 @@
 #define HISTORY_DRAW_TIME	"5"
 
 ConVar hud_drawhistory_time( "hud_drawhistory_time", HISTORY_DRAW_TIME, 0 );
-ConVar hud_fastswitch( "hud_fastswitch", "0", FCVAR_ARCHIVE | FCVAR_ARCHIVE_XBOX );
 
 //-----------------------------------------------------------------------------
 // Purpose: Weapon Selection commands
@@ -160,7 +159,7 @@ void CBaseHudWeaponSelection::ProcessInput()
 		// If so, close weapon selection when they press fire
 		if ( gHUD.m_iKeyBits & IN_ATTACK )
 		{
-			if ( HUDTYPE_PLUS != hud_fastswitch.GetInt() )
+			if ( HUDTYPE_PLUS != HUDTYPE_FASTSWITCH )
 			{
 				// Swallow the button
 				gHUD.m_iKeyBits &= ~IN_ATTACK;
@@ -178,7 +177,7 @@ void CBaseHudWeaponSelection::ProcessInput()
 		if ( IsWeaponSelectable() )
 		{
 #ifndef TF_CLIENT_DLL
-			if ( HUDTYPE_PLUS != hud_fastswitch.GetInt() )
+			if ( HUDTYPE_PLUS != HUDTYPE_FASTSWITCH )
 #endif
 			{
 				// Swallow the button
@@ -223,7 +222,7 @@ void CBaseHudWeaponSelection::HideSelection( void )
 bool CBaseHudWeaponSelection::CanBeSelectedInHUD( C_BaseCombatWeapon *pWeapon )
 {
 	// Xbox: In plus type, weapons without ammo can still be selected in the HUD
-	if( HUDTYPE_PLUS == hud_fastswitch.GetInt() )
+	if( HUDTYPE_PLUS == HUDTYPE_FASTSWITCH )
 	{
 		return pWeapon->VisibleInWeaponSelection();
 	}
@@ -279,7 +278,7 @@ void CBaseHudWeaponSelection::OnWeaponPickup( C_BaseCombatWeapon *pWeapon )
 //------------------------------------------------------------------------
 void CBaseHudWeaponSelection::UserCmd_Slot1(void)
 {
-	if( HUDTYPE_CAROUSEL == hud_fastswitch.GetInt() )
+	if( HUDTYPE_CAROUSEL == HUDTYPE_FASTSWITCH )
 	{
 		UserCmd_LastWeapon();
 	}
@@ -291,7 +290,7 @@ void CBaseHudWeaponSelection::UserCmd_Slot1(void)
 
 void CBaseHudWeaponSelection::UserCmd_Slot2(void)
 {
-	if( HUDTYPE_CAROUSEL == hud_fastswitch.GetInt() )
+	if( HUDTYPE_CAROUSEL == HUDTYPE_FASTSWITCH )
 	{
 		UserCmd_NextWeapon();
 	}
@@ -303,7 +302,7 @@ void CBaseHudWeaponSelection::UserCmd_Slot2(void)
 
 void CBaseHudWeaponSelection::UserCmd_Slot3(void)
 {
-	if( HUDTYPE_CAROUSEL == hud_fastswitch.GetInt() )
+	if( HUDTYPE_CAROUSEL == HUDTYPE_FASTSWITCH )
 	{
 		engine->ClientCmd( "phys_swap" );
 	}
@@ -315,7 +314,7 @@ void CBaseHudWeaponSelection::UserCmd_Slot3(void)
 
 void CBaseHudWeaponSelection::UserCmd_Slot4(void)
 {
-	if( HUDTYPE_CAROUSEL == hud_fastswitch.GetInt() )
+	if( HUDTYPE_CAROUSEL == HUDTYPE_FASTSWITCH )
 	{
 		UserCmd_PrevWeapon();
 	}
@@ -436,7 +435,7 @@ void CBaseHudWeaponSelection::UserCmd_NextWeapon(void)
 		return;
 
 	CycleToNextWeapon();
-	if( hud_fastswitch.GetInt() > 0 )
+	if( HUDTYPE_FASTSWITCH > 0 )
 	{
 		SelectWeapon();
 	}
@@ -454,7 +453,7 @@ void CBaseHudWeaponSelection::UserCmd_PrevWeapon(void)
 
 	CycleToPrevWeapon();
 
-	if( hud_fastswitch.GetInt() > 0 )
+	if( HUDTYPE_FASTSWITCH > 0 )
 	{
 		SelectWeapon();
 	}

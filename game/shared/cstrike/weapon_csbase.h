@@ -71,6 +71,36 @@ enum CSWeaponMode
 
 #endif
 
+#if defined( CLIENT_DLL )
+// CSO-style per-weapon viewmodel bob state, ported from
+// FJH03/CSSO-NOOFFICIAL-MP (game/shared/cstrike/weapon_csbase.h).
+// One state per weapon, so switching guns never inherits stale bob phase.
+struct BobState_t
+{
+	BobState_t()
+	{
+		m_flBobTime = 0;
+		m_flLastBobTime = 0;
+		m_flLastSpeed = 0;
+		m_flVerticalBob = 0;
+		m_flLateralBob = 0;
+		m_flRawVerticalBob = 0;
+		m_flRawLateralBob = 0;
+	}
+
+	float m_flBobTime;
+	float m_flLastBobTime;
+	float m_flLastSpeed;
+	float m_flVerticalBob;
+	float m_flLateralBob;
+	float m_flRawVerticalBob;
+	float m_flRawLateralBob;
+};
+
+float CalcViewModelBobHelper( CBasePlayer *player, BobState_t *pBobState, float flMaxSpeed );
+void AddViewModelBobHelper( Vector &origin, QAngle &angles, BobState_t *pBobState );
+#endif
+
 	//--------------------------------------------------------------------------------------------------------------
 	CCSWeaponInfo * GetWeaponInfo( CSWeaponID weaponID );
 
@@ -174,6 +204,9 @@ public:
 		int				m_iCrosshairTextureID; // for white additive texture
 
 		virtual int GetMuzzleFlashStyle( void );
+
+		BobState_t		*GetBobState() { return &m_BobState; }
+		BobState_t		m_BobState;	// CSO-style per-weapon bob state
 
 	#else
 

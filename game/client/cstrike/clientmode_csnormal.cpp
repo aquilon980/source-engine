@@ -300,6 +300,7 @@ void ClientModeCSNormal::Init()
 	ListenForGameEvent( "bomb_defused" );
 	ListenForGameEvent( "hostage_killed" );
 	ListenForGameEvent( "hostage_hurt" );	
+	ListenForGameEvent( "hegrenade_detonate" ); // reactive smoke: HE blasts clear smoke
 
 	usermessages->HookMessage( "KillCam", MsgFunc_KillCam );
 
@@ -619,6 +620,14 @@ void ClientModeCSNormal::FireGameEvent( IGameEvent *event )
 		{
 			internalCenterPrint->Print( "#Cstrike_TitlesTXT_Injured_Hostage" );
 		}
+	}
+
+	else if ( Q_strcmp( "hegrenade_detonate", eventname ) == 0 )
+	{
+		// CS2-style reactive smoke (see docs/smoke-reactive.md): an HE blast
+		// clears nearby smoke for a few seconds, then it refills in place.
+		extern void ReactiveSmoke_OnExplosion( const Vector &vecCenter );
+		ReactiveSmoke_OnExplosion( Vector( event->GetFloat( "x" ), event->GetFloat( "y" ), event->GetFloat( "z" ) ) );
 	}
 
 	else if ( Q_strcmp( "player_death", eventname ) == 0 )

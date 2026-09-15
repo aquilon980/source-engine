@@ -462,6 +462,11 @@ void CBaseAchievement::EnsureComponentBitSetAndEvaluate( int iBitNumber )
 //-----------------------------------------------------------------------------
 void CBaseAchievement::ShowProgressNotification()
 {
+	// achievements-off tune (see docs/menu-cleanup.md): no popups, ever.
+	// Unlock state still tracks silently in the backend; nothing displays,
+	// nothing plays, the menu button is gone.
+	return;
+
 	if ( !ShouldShowProgressNotification() )
 		return;
 

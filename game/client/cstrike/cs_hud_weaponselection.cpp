@@ -558,7 +558,7 @@ void CHudWeaponSelection::CycleToNextWeapon( void )
 	{
 		SetSelectedWeapon( pNextWeapon );
 
-		if( hud_fastswitch.GetInt() > 0 )
+		if( HUDTYPE_FASTSWITCH > 0 )
 		{
 			SelectWeapon();
 		}
@@ -616,7 +616,7 @@ void CHudWeaponSelection::CycleToPrevWeapon( void )
 	{
 		SetSelectedWeapon( pNextWeapon );
 
-		if( hud_fastswitch.GetInt() > 0 )
+		if( HUDTYPE_FASTSWITCH > 0 )
 		{
 			SelectWeapon();
 		}
@@ -828,7 +828,7 @@ void CHudWeaponSelection::SelectWeaponSlot( int iSlot )
 
 		// if fast weapon switch is on, then weapons can be selected in a single keypress
 		// but only if there is only one item in the bucket
-		if( hud_fastswitch.GetInt() > 0 && bMultipleWeaponsInSlot == false )
+		if( HUDTYPE_FASTSWITCH > 0 && bMultipleWeaponsInSlot == false )
 		{
 			// only one active item in bucket, so change directly to weapon
 			SelectWeapon();

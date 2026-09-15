@@ -185,11 +185,20 @@ extern ConVar sv_stopspeed;
 
 ConVar mp_buytime( 
 	"mp_buytime", 
-	"1.5",
+	"999", // casual-rules tune: effectively infinite buy time
 	FCVAR_REPLICATED,
 	"How many minutes after round start players can buy items for.",
 	true, 0.25,
 	false, 0 );
+
+// casual-rules tune (see docs/casual-defaults.md): buy from anywhere.
+ConVar mp_buy_anywhere(
+	"mp_buy_anywhere",
+	"1",
+	FCVAR_REPLICATED,
+	"Players can buy from anywhere on the map, not just buy zones.",
+	true, 0,
+	true, 1 );
 
 ConVar mp_playerid(
 	"mp_playerid",
@@ -342,7 +351,7 @@ ConVar cl_autohelp(
 
 	ConVar mp_startmoney( 
 		"mp_startmoney", 
-		"800", 
+		"16000", // casual-rules tune: max money by default
 		FCVAR_REPLICATED | FCVAR_NOTIFY,
 		"amount of money each player gets when they reset",
 		true, 800,

@@ -39,6 +39,9 @@ const char *s_pDebrisContext = "DebrisContext";
 
 const float ATTACHED_DAMPING_SCALE = 50.0f;
 
+// Heavier-corpses tune (defined in game/shared/ragdoll_shared.cpp).
+extern ConVar ragdoll_jointfriction;
+
 //-----------------------------------------------------------------------------
 // Spawnflags
 //-----------------------------------------------------------------------------
@@ -698,7 +701,7 @@ void CRagdollProp::InitRagdoll( const Vector &forceVector, int forceBone, const 
 	params.forceBoneIndex = forceBone;
 	params.forcePosition = forcePos;
 	params.pCurrentBones = pBoneToWorld;
-	params.jointFrictionScale = 1.0;
+	params.jointFrictionScale = ragdoll_jointfriction.GetFloat();
 	params.allowStretch = HasSpawnFlags(SF_RAGDOLLPROP_ALLOW_STRETCH);
 	params.fixedConstraints = false;
 	RagdollCreate( m_ragdoll, params, physenv );

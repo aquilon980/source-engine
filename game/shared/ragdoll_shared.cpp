@@ -714,6 +714,12 @@ ConVar g_ragdoll_maxcount("g_ragdoll_maxcount", "8", FCVAR_REPLICATED );
 #endif
 ConVar g_debug_ragdoll_removal("g_debug_ragdoll_removal", "0", FCVAR_REPLICATED |FCVAR_CHEAT );
 
+// Heavier-corpses tune (see docs/ragdolls.md): stiffer joints + stronger
+// angular damping so bodies thud and settle instead of flopping around.
+// Replicated so server and client simulate the same corpse.
+ConVar ragdoll_jointfriction( "ragdoll_jointfriction", "2.0", FCVAR_REPLICATED | FCVAR_ARCHIVE, "Joint friction scale for ragdolls; higher = stiffer, heavier-feeling corpses.", true, 0.5, true, 4.0 );
+ConVar ragdoll_angdamping_scale( "ragdoll_angdamping_scale", "2.0", FCVAR_REPLICATED | FCVAR_ARCHIVE, "Multiplier on ragdoll angular damping; higher settles limbs faster.", true, 1.0, true, 6.0 );
+
 CRagdollLRURetirement s_RagdollLRU( "CRagdollLRURetirement" );
 
 void CRagdollLRURetirement::LevelInitPreEntity( void )

@@ -39,6 +39,11 @@
 
 ConVar weapon_accuracy_model( "weapon_accuracy_model", "2", FCVAR_REPLICATED | FCVAR_DEVELOPMENTONLY | FCVAR_ARCHIVE );
 
+// casual-rules tune (see docs/casual-defaults.md): global spread scale,
+// 1.0 = stock. Scales bullets and crosshair together (both read GetSpread /
+// GetInaccuracy), replicated so client and server agree.
+ConVar weapon_spread_scale( "weapon_spread_scale", "0.0", FCVAR_REPLICATED | FCVAR_ARCHIVE, "Scales all weapon spread and inaccuracy; lower = more accurate.", true, 0.0, true, 2.0 );
+
 
 // ----------------------------------------------------------------------------- //
 // Global functions.
@@ -704,11 +709,11 @@ float CWeaponCSBase::GetInaccuracy() const
 	if ( fMaxSpeed == 0.0f )
 		fMaxSpeed = GetCSWpnData().m_flMaxSpeed;
 
-	return m_fAccuracyPenalty + 
+	return ( m_fAccuracyPenalty + 
 		RemapValClamped(pPlayer->GetAbsVelocity().Length2D(), 
 		fMaxSpeed * CS_PLAYER_SPEED_DUCK_MODIFIER, 
 		fMaxSpeed * 0.95f,							// max out at 95% of run speed to avoid jitter near max speed
-		0.0f, weaponInfo.m_fInaccuracyMove[m_weaponMode]);
+		0.0f, weaponInfo.m_fInaccuracyMove[m_weaponMode] ) ) * weapon_spread_scale.GetFloat();
 }
 
 
@@ -717,7 +722,7 @@ float CWeaponCSBase::GetSpread() const
 	if ( weapon_accuracy_model.GetInt() == 1 )
 		return 0.0f;
 
-	return GetCSWpnData().m_fSpread[m_weaponMode];
+	return GetCSWpnData().m_fSpread[m_weaponMode] * weapon_spread_scale.GetFloat();
 }
 
 
@@ -1618,16 +1623,145 @@ bool CWeaponCSBase::IsUseable()
 	float	g_lateralBob = 0;
 	float	g_verticalBob = 0;
 
-	static ConVar	cl_bobcycle( "cl_bobcycle","0.8", FCVAR_CHEAT );
+	static ConVar	cl_bobcycle( "cl_bobcycle", "0.98", FCVAR_ARCHIVE, "the frequency at which the viewmodel bobs.", true, 0.1, true, 2.0 );
 	static ConVar	cl_bob( "cl_bob","0.002", FCVAR_CHEAT );
 	static ConVar	cl_bobup( "cl_bobup","0.5", FCVAR_CHEAT );
 
+	// CSO-style viewmodel bob, ported from FJH03/CSSO-NOOFFICIAL-MP.
+	// 0 = classic CS:S bob below, 1 = CS:GO-style bob via the helpers.
+	ConVar	cl_use_new_headbob( "cl_use_new_headbob", "1", FCVAR_ARCHIVE, "What viewbob style to use: CS:S (0) or CS:GO (1)." );
+	static ConVar	cl_bobamt_vert( "cl_bobamt_vert", "0.25", FCVAR_ARCHIVE, "The amount the viewmodel moves up and down when running", true, 0.1, true, 2 );
+	static ConVar	cl_bobamt_lat( "cl_bobamt_lat", "0.4", FCVAR_ARCHIVE, "The amount the viewmodel moves side to side when running", true, 0.1, true, 2 );
+	static ConVar	cl_bob_lower_amt( "cl_bob_lower_amt", "21", FCVAR_ARCHIVE, "The amount the viewmodel lowers when running", true, 5, true, 30 );
+
 	//-----------------------------------------------------------------------------
-	// Purpose:
-	// Output : float
+	// CSO-style viewmodel bob helpers, ported from FJH03/CSSO-NOOFFICIAL-MP
+	// (game/shared/cstrike/weapon_csbase.cpp :: CalcViewModelBobHelper /
+	// AddViewModelBobHelper). Simplified: movement-driven bob only — the
+	// upstream tree has no accuracy-shift (m_flGunAccuracyPosition),
+	// ironsight-controller, or hostage-viewmodel plumbing, so those branches
+	// are left out (see docs/weapon-bob.md follow-ups).
 	//-----------------------------------------------------------------------------
+	float CalcViewModelBobHelper( CBasePlayer *player, BobState_t *pBobState, float flMaxSpeed )
+	{
+		Assert( pBobState );
+		if ( !pBobState )
+			return 0.0f;
+
+		float	cycle;
+
+		//NOTENOTE: For now, let this cycle continue when in the air, because it snaps badly without it
+		if ( (!gpGlobals->frametime) || (player == NULL) )
+		{
+			//NOTENOTE: We don't use this return value in our case (need to restructure the calculation function setup!)
+			return 0.0f;// just use old value
+		}
+
+		//Find the speed of the player
+		float speed = player->GetLocalVelocity().Length2D();
+
+		float flmaxSpeedDelta = MAX( 0, (gpGlobals->curtime - pBobState->m_flLastBobTime) * 640.0f );
+
+		// don't allow too big speed changes
+		speed = clamp( speed, pBobState->m_flLastSpeed - flmaxSpeedDelta, pBobState->m_flLastSpeed + flmaxSpeedDelta );
+		speed = clamp( speed, -320.0f, 320.0f );
+
+		pBobState->m_flLastSpeed = speed;
+
+		// when the player is moving, the gun lowers a bit
+		float flSpeedFactor = clamp( speed * 0.006f, 0.0f, 0.5f );
+		float flRunAddAmt = cl_bob_lower_amt.GetFloat() * 0.2f * flSpeedFactor;
+
+		float bob_offset = RemapVal( speed, 0.0f, 320.0f, 0.0f, 1.0f );
+
+		pBobState->m_flBobTime += (gpGlobals->curtime - pBobState->m_flLastBobTime) * bob_offset;
+		pBobState->m_flLastBobTime = gpGlobals->curtime;
+
+		// Heavier weapons bob slower: derive the cycle from max move speed.
+		float flBobCycle = (((1000.0f - flMaxSpeed) / 3.5f) * 0.001f) * cl_bobcycle.GetFloat();
+
+		//Calculate the vertical bob
+		cycle = pBobState->m_flBobTime - (int)(pBobState->m_flBobTime / flBobCycle)*flBobCycle;
+		cycle /= flBobCycle;
+
+		if ( cycle < cl_bobup.GetFloat() )
+		{
+			cycle = M_PI * cycle / cl_bobup.GetFloat();
+		}
+		else
+		{
+			cycle = M_PI + M_PI*(cycle - cl_bobup.GetFloat()) / (1.0 - cl_bobup.GetFloat());
+		}
+
+		float flBobMultiplier = 0.00625f;
+		// if we're in the air, slow our bob down a bit
+		if ( player->GetGroundEntity() == NULL )
+			flBobMultiplier = 0.00125f;
+
+		pBobState->m_flVerticalBob = speed * (flBobMultiplier * cl_bobamt_vert.GetFloat());
+		pBobState->m_flVerticalBob = (pBobState->m_flVerticalBob*0.3 + pBobState->m_flVerticalBob*0.7*sin( cycle ));
+		pBobState->m_flRawVerticalBob = pBobState->m_flVerticalBob;
+
+		pBobState->m_flVerticalBob = clamp( (pBobState->m_flVerticalBob - flRunAddAmt), -7.0f, 4.0f );
+
+		//Calculate the lateral bob
+		cycle = pBobState->m_flBobTime - (int)(pBobState->m_flBobTime / flBobCycle * 2)*flBobCycle * 2;
+		cycle /= flBobCycle * 2;
+
+		if ( cycle < cl_bobup.GetFloat() )
+		{
+			cycle = M_PI * cycle / cl_bobup.GetFloat();
+		}
+		else
+		{
+			cycle = M_PI + M_PI*(cycle - cl_bobup.GetFloat()) / (1.0 - cl_bobup.GetFloat());
+		}
+
+		pBobState->m_flLateralBob = speed * (flBobMultiplier * cl_bobamt_lat.GetFloat());
+		pBobState->m_flLateralBob = pBobState->m_flLateralBob*0.3 + pBobState->m_flLateralBob*0.7*sin( cycle );
+		pBobState->m_flRawLateralBob = pBobState->m_flLateralBob;
+
+		pBobState->m_flLateralBob = clamp( pBobState->m_flLateralBob, -8.0f, 8.0f );
+
+		//NOTENOTE: We don't use this return value in our case (need to restructure the calculation function setup!)
+		return 0.0f;
+	}
+
+	//-----------------------------------------------------------------------------
+	// Purpose: Helper function to add head bob
+	//-----------------------------------------------------------------------------
+	void AddViewModelBobHelper( Vector &origin, QAngle &angles, BobState_t *pBobState )
+	{
+		Assert( pBobState );
+		if ( !pBobState )
+			return;
+
+		Vector	forward, right;
+		AngleVectors( angles, &forward, &right, NULL );
+
+		// Apply bob, but scaled down to 40%
+		VectorMA( origin, pBobState->m_flVerticalBob * 0.4f, forward, origin );
+
+		// Z bob a bit more
+		origin[2] += pBobState->m_flVerticalBob * 0.1f;
+
+		// bob the angles
+		angles[ROLL] += pBobState->m_flVerticalBob * 0.5f;
+		angles[PITCH] -= pBobState->m_flVerticalBob * 0.4f;
+		angles[YAW] -= pBobState->m_flLateralBob  * 0.3f;
+
+		VectorMA( origin, pBobState->m_flLateralBob * 0.2f, right, origin );
+	}
+
 	float CWeaponCSBase::CalcViewmodelBob( void )
 	{
+		if ( cl_use_new_headbob.GetBool() )
+		{
+			CBasePlayer *player = ToBasePlayer( GetOwner() );
+			return CalcViewModelBobHelper( player, GetBobState(), GetMaxSpeed() );
+		}
+
+		// Classic CS:S bob (cl_use_new_headbob 0) — untouched upstream code.
 		static	float bobtime;
 		static	float lastbobtime;
 		static  float lastspeed;
@@ -1716,6 +1850,14 @@ bool CWeaponCSBase::IsUseable()
 	//-----------------------------------------------------------------------------
 	void CWeaponCSBase::AddViewmodelBob( CBaseViewModel *viewmodel, Vector &origin, QAngle &angles )
 	{
+		if ( cl_use_new_headbob.GetBool() )
+		{
+			CalcViewmodelBob();
+			AddViewModelBobHelper( origin, angles, GetBobState() );
+			return;
+		}
+
+		// Classic CS:S bob (cl_use_new_headbob 0) — untouched upstream code.
 		Vector	forward, right;
 		AngleVectors( angles, &forward, &right, NULL );
 

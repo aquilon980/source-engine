@@ -349,10 +349,6 @@ FileWeaponInfo_t::FileWeaponInfo_t()
 	m_bBuiltRightHanded = true;
 }
 
-#ifdef CLIENT_DLL
-extern ConVar hud_fastswitch;
-#endif
-
 void FileWeaponInfo_t::Parse( KeyValues *pKeyValuesData, const char *szWeaponName )
 {
 	// Okay, we tried at least once to look this up...
@@ -369,9 +365,9 @@ void FileWeaponInfo_t::Parse( KeyValues *pKeyValuesData, const char *szWeaponNam
 	iSlot = pKeyValuesData->GetInt( "bucket", 0 );
 	iPosition = pKeyValuesData->GetInt( "bucket_position", 0 );
 	
-	// Use the console (X360) buckets if hud_fastswitch is set to 2.
+	// fastswitch-always tune: console buckets unreachable (was hud_fastswitch == 2).
 #ifdef CLIENT_DLL
-	if ( hud_fastswitch.GetInt() == 2 )
+	if ( false )
 #else
 	if ( IsX360() )
 #endif

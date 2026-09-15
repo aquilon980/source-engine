@@ -15,9 +15,10 @@
 class C_BaseCombatWeapon;
 class C_BasePlayer;
 
-extern ConVar hud_fastswitch;
+// fastswitch-always tune: the hud_fastswitch cvar is gone, the type
+// below is now the only behavior. See docs/fastswitch.md.
 
-// weapon switch types for Convar hud_fastswitch
+// weapon switch types (hud_fastswitch removed; HUDTYPE_FASTSWITCH always)
 #define HUDTYPE_BUCKETS					0	// PC buckets
 #define HUDTYPE_FASTSWITCH				1	// PC fastswitch
 #define	HUDTYPE_PLUS					2	// console buckets

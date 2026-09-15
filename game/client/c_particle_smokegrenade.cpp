@@ -42,6 +42,18 @@ static Vector s_FadePlaneDirections[] =
 int g_OffsetLookup[3] = {-1,0,1};
 
 
+// CS2-style reactive smoke (see docs/smoke-reactive.md): bullets punch
+// short-lived tunnels, HE blasts clear a sphere that refills in place.
+// Client-only visuals — the server sim and bot radius are untouched.
+static ConVar smoke_reactive_enable( "smoke_reactive_enable", "1", FCVAR_ARCHIVE, "CS2-style smoke: bullets carve holes, HE blasts clear smoke that refills." );
+static ConVar smoke_bullet_radius( "smoke_bullet_radius", "80", FCVAR_ARCHIVE, "Radius around a bullet path that thins smoke.", true, 4.0f, true, 160.0f );
+static ConVar smoke_bullet_strength( "smoke_bullet_strength", "0.85", FCVAR_ARCHIVE, "How much smoke one bullet clears (0-1).", true, 0.0f, true, 1.0f );
+static ConVar smoke_bullet_recover( "smoke_bullet_recover", "1.4", FCVAR_ARCHIVE, "Seconds for a bullet hole to refill.", true, 0.2f, true, 10.0f );
+static ConVar smoke_he_radius( "smoke_he_radius", "290", FCVAR_ARCHIVE, "Radius of the HE smoke clear.", true, 50.0f, true, 800.0f );
+static ConVar smoke_he_strength( "smoke_he_strength", "1.0", FCVAR_ARCHIVE, "How much smoke an HE blast clears (0-1).", true, 0.0f, true, 1.0f );
+static ConVar smoke_he_recover( "smoke_he_recover", "3.0", FCVAR_ARCHIVE, "Seconds for HE-cleared smoke to refill.", true, 0.5f, true, 15.0f );
+
+
 // ------------------------------------------------------------------------- //
 // Classes
 // ------------------------------------------------------------------------- //
@@ -62,6 +74,7 @@ private:
 		float				m_RotationSpeed;
 		float				m_CurRotation;
 		float				m_FadeAlpha;		// Set as it moves around.
+		float				m_Suppress;			// CS2-style carve: 0 = full smoke, 1 = cleared.
 		unsigned char		m_ColorInterp;		// Amount between min and max colors.
 		unsigned char		m_Color[4];
 	};
@@ -115,6 +128,8 @@ private:
 		float					m_TradeClock;		// How long since they started trading.
 		float					m_TradeDuration;	// How long the trade will take to finish.
 		float					m_FadeAlpha;		// Calculated from nearby world geometry.
+		float					m_BulletSuppress;	// CS2-style: bullet carve, refills fast.
+		float					m_BlastSuppress;	// CS2-style: HE clear, refills slow.
 		unsigned char			m_Color[4];
 	};
 
@@ -161,6 +176,11 @@ private:
 
 	// Start filling the smoke volume (and stop the smoke trail).
 	void						FillVolume();
+
+public:
+	// CS2-style reactive smoke (see docs/smoke-reactive.md).
+	void						ApplyBulletSegment( const Vector &vecStart, const Vector &vecEnd );
+	void						ApplyExplosion( const Vector &vecCenter );
 
 
 // State variables from server.
@@ -242,6 +262,19 @@ static inline int GetWorldPointContents(const Vector &vPos)
 	#else
 		return enginetrace->GetPointContents( vPos );
 	#endif
+}
+
+// Shortest distance from a point to a segment. Used to carve bullet tunnels.
+static inline float ReactiveSmokeDistPointToSegment( const Vector &vPoint, const Vector &vStart, const Vector &vEnd )
+{
+	Vector vSeg = vEnd - vStart;
+	float flLenSqr = vSeg.LengthSqr();
+	if ( flLenSqr < 1e-6f )
+		return ( vPoint - vStart ).Length();
+
+	float flT = DotProduct( vPoint - vStart, vSeg ) / flLenSqr;
+	flT = clamp( flT, 0.0f, 1.0f );
+	return ( vPoint - ( vStart + vSeg * flT ) ).Length();
 }
 
 static inline void WorldTraceLine( const Vector &start, const Vector &end, int contentsMask, trace_t *trace )
@@ -405,14 +438,31 @@ void C_ParticleSmokeGrenade::ClientThink()
 		float flCoreDistance = fadeEnd * 0.3;
 		
 		if(testDist < fadeEnd)
-		{			
+		{
+			// CS2-style: carved/cleared smoke fogs the screen less. Average the
+			// per-cell clear amounts so the overlay tracks the visible puffs.
+			float flSuppressSum = 0.0f;
+			int nSuppressCount = 0;
+			int nTotalFog = m_xCount * m_yCount * m_zCount;
+			for ( int iFog = 0; iFog < nTotalFog; iFog++ )
+			{
+				SmokeParticleInfo *pFogInfo = &m_SmokeParticleInfos[iFog];
+				if ( !pFogInfo->m_pParticle )
+					continue;
+				flSuppressSum += MAX( pFogInfo->m_BulletSuppress, pFogInfo->m_BlastSuppress );
+				nSuppressCount++;
+			}
+			float flFogAlpha = m_FadeAlpha;
+			if ( nSuppressCount > 0 )
+				flFogAlpha *= 1.0f - ( flSuppressSum / (float)nSuppressCount );
+
 			if( testDist < flCoreDistance )
 			{
-				EngineGetSmokeFogOverlayAlpha() += m_FadeAlpha;
+				EngineGetSmokeFogOverlayAlpha() += flFogAlpha;
 			}
 			else
 			{
-				EngineGetSmokeFogOverlayAlpha() += (1 - ( testDist - flCoreDistance ) / ( fadeEnd - flCoreDistance ) ) * m_FadeAlpha;
+				EngineGetSmokeFogOverlayAlpha() += (1 - ( testDist - flCoreDistance ) / ( fadeEnd - flCoreDistance ) ) * flFogAlpha;
 			}
 		}	
 	}
@@ -483,6 +533,12 @@ inline void C_ParticleSmokeGrenade::UpdateParticleDuringTrade( int iParticle, fl
 			pInfo->m_pParticle->m_FadeAlpha  = pInfo->m_FadeAlpha + (pOther->m_FadeAlpha - pInfo->m_FadeAlpha) * (1 - percent);
 			pOther->m_pParticle->m_FadeAlpha = pInfo->m_FadeAlpha + (pOther->m_FadeAlpha - pInfo->m_FadeAlpha) * percent;
 
+			// CS2-style: the carve amount rides along with the trade.
+			float flSuppressA = MAX( pInfo->m_BulletSuppress, pInfo->m_BlastSuppress );
+			float flSuppressB = MAX( pOther->m_BulletSuppress, pOther->m_BlastSuppress );
+			pInfo->m_pParticle->m_Suppress  = flSuppressA + (flSuppressB - flSuppressA) * (1 - percent);
+			pOther->m_pParticle->m_Suppress = flSuppressA + (flSuppressB - flSuppressA) * percent;
+
 			InterpColor(pInfo->m_pParticle->m_Color,  pInfo->m_Color, pOther->m_Color, 1-percent);
 			InterpColor(pOther->m_pParticle->m_Color, pInfo->m_Color, pOther->m_Color, percent);
 
@@ -501,6 +557,9 @@ void C_ParticleSmokeGrenade::UpdateParticleAndFindTrade( int iParticle, float fT
 	pInfo->m_pParticle->m_Color[0] = pInfo->m_Color[0];
 	pInfo->m_pParticle->m_Color[1] = pInfo->m_Color[1];
 	pInfo->m_pParticle->m_Color[2] = pInfo->m_Color[2];
+
+	// CS2-style: carry the carve amount onto the visible particle.
+	pInfo->m_pParticle->m_Suppress = MAX( pInfo->m_BulletSuppress, pInfo->m_BlastSuppress );
 
 	// Is there an adjacent one that's not trading?
 	int x, y, z;
@@ -596,12 +655,20 @@ void C_ParticleSmokeGrenade::Update(float fTimeDelta)
 
 		// Update all the moving traders and establish new ones.
 		int nTotal = m_xCount * m_yCount * m_zCount;
+		float flBulletStep = fTimeDelta / MAX( 0.2f, smoke_bullet_recover.GetFloat() );
+		float flBlastStep = fTimeDelta / MAX( 0.5f, smoke_he_recover.GetFloat() );
 		for(int i=0; i < nTotal; i++)
 		{
 			SmokeParticleInfo *pInfo = &m_SmokeParticleInfos[i];
 
 			if(!pInfo->m_pParticle)
 				continue;
+
+			// CS2-style refill: bullet holes close fast, HE clears linger.
+			if ( pInfo->m_BulletSuppress > 0.0f )
+				pInfo->m_BulletSuppress = MAX( 0.0f, pInfo->m_BulletSuppress - flBulletStep );
+			if ( pInfo->m_BlastSuppress > 0.0f )
+				pInfo->m_BlastSuppress = MAX( 0.0f, pInfo->m_BlastSuppress - flBlastStep );
 		
 			if(pInfo->m_TradeIndex == -1)
 			{
@@ -727,6 +794,9 @@ void C_ParticleSmokeGrenade::RenderParticles( CParticleRenderIterator *pIterator
 			// Apply the precalculated fade alpha from world geometry.
 			alpha *= pParticle->m_FadeAlpha;
 
+			// CS2-style reactive smoke: carved holes thin the puff.
+			alpha *= ( 1.0f - pParticle->m_Suppress );
+
 			// TODO: optimize this whole routine!
 			Vector color = m_MinColor + (m_MaxColor - m_MinColor) * (pParticle->m_ColorInterp / 255.1f);
 			color.x *= pParticle->m_Color[0] / 255.0f;
@@ -744,14 +814,19 @@ void C_ParticleSmokeGrenade::RenderParticles( CParticleRenderIterator *pIterator
 
 			//debugoverlay->AddBoxOverlay( renderPos, Vector( -2, -2, -2), Vector( 2, 2, 2), vec3_angle, 255, 255, 255, 255, 1.0f );
 
+			// Skip only puffs the carve has actually erased, so
+			// smoke_reactive_enable 0 stays pixel-identical to stock.
+			if ( pParticle->m_Suppress <= 0.0f || alpha > 0.001f )
+			{
 			RenderParticle_ColorSizeAngle(
 				pIterator->GetParticleDraw(),
 				tRenderPos,
 				color,
-				alpha * GetAlphaDistanceFade(tRenderPos, 0, 10),	// Alpha
+				alpha,
 				SMOKEPARTICLE_SIZE,
 				pParticle->m_CurRotation
 				);
+			}
 		}
 
 		pParticle = (SmokeGrenadeParticle*)pIterator->GetNext( sortKey );
@@ -867,6 +942,7 @@ void C_ParticleSmokeGrenade::FillVolume()
 							pParticle->m_ColorInterp = (unsigned char)((rand() * 255) / VALVE_RAND_MAX);
 							pParticle->m_RotationSpeed = FRand(-ROTATION_SPEED, ROTATION_SPEED); // Rotation speed.
 							pParticle->m_CurRotation = FRand(-6, 6);
+							pParticle->m_Suppress = 0.0f;
 
 							//debugoverlay->AddBoxOverlay( vPos, Vector( -2, -2, -2), Vector( 2, 2, 2), vec3_angle, 255, 0, 0, 255, 5.0f );
 						}
@@ -887,6 +963,8 @@ void C_ParticleSmokeGrenade::FillVolume()
 
 						// Cast some rays and if it's too close to anything, fade its alpha down.
 						pInfo->m_FadeAlpha = 1;
+						pInfo->m_BulletSuppress = 0.0f;
+						pInfo->m_BlastSuppress = 0.0f;
 
 						/*for(int i=0; i < NUM_FADE_PLANES; i++)
 						{
@@ -1028,6 +1106,150 @@ void C_ParticleSmokeGrenade::CleanupToolRecordingState( KeyValues *msg )
 		ToolFramework_PostToolMessage( HTOOLHANDLE_INVALID, msg );
 		msg->deleteThis();
 	}
+}
+
+
+//-----------------------------------------------------------------------------
+// CS2-style reactive smoke (see docs/smoke-reactive.md). Client-only: carve
+// the local copy of every active smoke, no server or networking changes.
+//-----------------------------------------------------------------------------
+void C_ParticleSmokeGrenade::ApplyBulletSegment( const Vector &vecStart, const Vector &vecEnd )
+{
+	if ( m_CurrentStage != 1 || !smoke_reactive_enable.GetBool() )
+		return;
+
+	float flRadius = smoke_bullet_radius.GetFloat();
+	float flStrength = smoke_bullet_strength.GetFloat();
+	if ( flRadius <= 0.0f || flStrength <= 0.0f )
+		return;
+
+	// Quick reject: the segment misses the whole cloud.
+	float flCloudRadius = m_SpacingRadius * 2.0f + SMOKEPARTICLE_SIZE;
+	if ( ReactiveSmokeDistPointToSegment( m_SmokeBasePos, vecStart, vecEnd ) > flCloudRadius + flRadius )
+		return;
+
+	int nTotal = m_xCount * m_yCount * m_zCount;
+	for ( int i = 0; i < nTotal; i++ )
+	{
+		SmokeParticleInfo *pInfo = &m_SmokeParticleInfos[i];
+		if ( !pInfo->m_pParticle )
+			continue;
+
+		Vector vWorldPos = m_SmokeBasePos + pInfo->m_pParticle->m_Pos;
+		float flDist = ReactiveSmokeDistPointToSegment( vWorldPos, vecStart, vecEnd );
+		if ( flDist < flRadius )
+		{
+			float flFall = 1.0f - flDist / flRadius;
+			flFall *= flFall;
+			pInfo->m_BulletSuppress = MIN( 1.0f, pInfo->m_BulletSuppress + flStrength * flFall );
+			// Snap the visible copy so the hole punches this frame, not next.
+			pInfo->m_pParticle->m_Suppress = MAX( pInfo->m_BulletSuppress, pInfo->m_BlastSuppress );
+		}
+	}
+}
+
+
+void C_ParticleSmokeGrenade::ApplyExplosion( const Vector &vecCenter )
+{
+	if ( m_CurrentStage != 1 || !smoke_reactive_enable.GetBool() )
+		return;
+
+	float flRadius = smoke_he_radius.GetFloat();
+	float flStrength = smoke_he_strength.GetFloat();
+	if ( flRadius <= 0.0f || flStrength <= 0.0f )
+		return;
+
+	float flCloudRadius = m_SpacingRadius * 2.0f + SMOKEPARTICLE_SIZE;
+	if ( ( m_SmokeBasePos - vecCenter ).Length() > flCloudRadius + flRadius )
+		return;
+
+	int nTotal = m_xCount * m_yCount * m_zCount;
+	for ( int i = 0; i < nTotal; i++ )
+	{
+		SmokeParticleInfo *pInfo = &m_SmokeParticleInfos[i];
+		if ( !pInfo->m_pParticle )
+			continue;
+
+		Vector vWorldPos = m_SmokeBasePos + pInfo->m_pParticle->m_Pos;
+		float flDist = ( vWorldPos - vecCenter ).Length();
+		if ( flDist < flRadius )
+		{
+			float flFall = 1.0f - flDist / flRadius;
+			pInfo->m_BlastSuppress = MIN( 1.0f, pInfo->m_BlastSuppress + flStrength * flFall );
+			pInfo->m_pParticle->m_Suppress = MAX( pInfo->m_BulletSuppress, pInfo->m_BlastSuppress );
+		}
+	}
+}
+
+
+#if CSTRIKE_DLL
+static int ReactiveSmoke_ForEachSmoke( void (*pfn)( C_ParticleSmokeGrenade*, void* ), void *pCtx )
+{
+	C_CSPlayer *pPlayer = C_CSPlayer::GetLocalCSPlayer();
+	if ( !pPlayer )
+		return 0;
+
+	int nCount = 0;
+	for ( int i = 0; i < pPlayer->m_SmokeGrenades.Count(); i++ )
+	{
+		C_ParticleSmokeGrenade *pSmoke = dynamic_cast< C_ParticleSmokeGrenade* >( (C_BaseParticleEntity*)pPlayer->m_SmokeGrenades.Element( i ) );
+		if ( pSmoke )
+		{
+			pfn( pSmoke, pCtx );
+			nCount++;
+		}
+	}
+	return nCount;
+}
+
+struct ReactiveSmoke_SegmentCtx_t
+{
+	const Vector *pStart;
+	const Vector *pEnd;
+};
+
+static void ReactiveSmoke_ApplySegment( C_ParticleSmokeGrenade *pSmoke, void *pCtx )
+{
+	ReactiveSmoke_SegmentCtx_t *pSegment = (ReactiveSmoke_SegmentCtx_t*)pCtx;
+	pSmoke->ApplyBulletSegment( *pSegment->pStart, *pSegment->pEnd );
+}
+
+static void ReactiveSmoke_ApplyBlast( C_ParticleSmokeGrenade *pSmoke, void *pCtx )
+{
+	pSmoke->ApplyExplosion( *(const Vector*)pCtx );
+}
+#endif // CSTRIKE_DLL
+
+
+// Called from CCSPlayer::FireBullet (client) for every traced bullet segment,
+// hits and misses alike, so shooting through smoke leaves a tunnel.
+void ReactiveSmoke_OnBulletSegment( const Vector &vecStart, const Vector &vecEnd )
+{
+	if ( !smoke_reactive_enable.GetBool() )
+		return;
+
+#if CSTRIKE_DLL
+	ReactiveSmoke_SegmentCtx_t ctx = { &vecStart, &vecEnd };
+	ReactiveSmoke_ForEachSmoke( ReactiveSmoke_ApplySegment, &ctx );
+#endif
+}
+
+
+// Called from ClientModeCSNormal on hegrenade_detonate. The clear refills in
+// place over smoke_he_recover seconds.
+void ReactiveSmoke_OnExplosion( const Vector &vecCenter )
+{
+	if ( !smoke_reactive_enable.GetBool() )
+		return;
+
+	// A zero vector means the event carried no origin (bad key/old demo) —
+	// never nuke the smoke sitting at the map origin by mistake.
+	if ( vecCenter.IsZero() )
+		return;
+
+#if CSTRIKE_DLL
+	ReactiveSmoke_ForEachSmoke( ReactiveSmoke_ApplyBlast, (void*)&vecCenter );
+#endif
 }
 
 
