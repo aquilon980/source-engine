@@ -146,8 +146,6 @@ $Project "GameUI"
 
 	$Folder	"Dialogs"
 	{
-		$File	"BenchmarkDialog.cpp"
-		$File	"BenchmarkDialog.h"
 		$File	"BonusMapsDialog.cpp"
 		$File	"BonusMapsDialog.h"
 		$File	"CommentaryDialog.cpp"

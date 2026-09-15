@@ -225,7 +225,6 @@ public:
 	void OnOpenDisconnectConfirmationDialog();
 	void OnOpenChangeGameDialog();
 	void OnOpenPlayerListDialog();
-	void OnOpenBenchmarkDialog();
 	void OnOpenOptionsDialog();
 	void OnOpenOptionsDialog_Xbox();
 	void OnOpenLoadCommentaryDialog();
@@ -379,7 +378,6 @@ private:
 	//vgui::DHANDLE<vgui::Frame> m_hDemoPlayerDialog;
 	vgui::DHANDLE<vgui::Frame> m_hChangeGameDialog;
 	vgui::DHANDLE<vgui::Frame> m_hPlayerListDialog;
-	vgui::DHANDLE<vgui::Frame> m_hBenchmarkDialog;
 	vgui::DHANDLE<vgui::Frame> m_hLoadCommentaryDialog;
 	vgui::DHANDLE<vgui::Frame> m_hAchievementsDialog;
 

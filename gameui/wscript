@@ -49,7 +49,6 @@ def build(bld):
 		'LabeledCommandComboBox.cpp',
 		'URLButton.cpp',
 		'vcontrolslistpanel.cpp',
-		'BenchmarkDialog.cpp',
 		'BonusMapsDialog.cpp',
 		'CommentaryDialog.cpp',
 		'CommentaryExplanationDialog.cpp',

@@ -1033,8 +1033,6 @@ COptionsSubVideo::COptionsSubVideo(vgui::Panel *parent) : PropertyPage(parent, N
 	m_pVRMode = new ComboBox( this, "VRMode", 2, false );
 	m_pAdvanced = new Button( this, "AdvancedButton", "#GameUI_AdvancedEllipsis" );
 	m_pAdvanced->SetCommand(new KeyValues("OpenAdvanced"));
-	m_pBenchmark = new Button( this, "BenchmarkButton", "#GameUI_LaunchBenchmark" );
-	m_pBenchmark->SetCommand(new KeyValues("LaunchBenchmark"));
 	m_pThirdPartyCredits = new URLButton(this, "ThirdPartyVideoCredits", "#GameUI_ThirdPartyTechCredits");
 //	m_pThirdPartyCredits->SetCommand(new KeyValues("OpenThirdPartyVideoCreditsDialog"));
 	m_pThirdPartyCredits->SetVisible(false);
@@ -1133,12 +1131,6 @@ COptionsSubVideo::COptionsSubVideo(vgui::Panel *parent) : PropertyPage(parent, N
 	// Moved down here so we can set the Drop down's
 	// menu state after the default (disabled) value is loaded
 	PrepareResolutionList();
-
-	// only show the benchmark button if they have the benchmark map
-	if ( !g_pFullFileSystem->FileExists("maps/test_hardware.bsp") )
-	{
-		m_pBenchmark->SetVisible( false );
-	}
 
 	if ( ModInfo().HasHDContent() )
 	{
@@ -1743,14 +1735,6 @@ void COptionsSubVideo::OpenGammaDialog()
 	}
 
 	m_hGammaDialog->Activate();
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: Opens benchmark dialog
-//-----------------------------------------------------------------------------
-void COptionsSubVideo::LaunchBenchmark()
-{
-	BasePanel()->OnOpenBenchmarkDialog();
 }
 
 //-----------------------------------------------------------------------------

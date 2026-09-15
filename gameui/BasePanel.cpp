@@ -58,7 +58,6 @@ using namespace vgui;
 #include "ChangeGameDialog.h"
 #include "BackgroundMenuButton.h"
 #include "PlayerListDialog.h"
-#include "BenchmarkDialog.h"
 #include "LoadCommentaryDialog.h"
 #include "ControllerDialog.h"
 #include "BonusMapsDatabase.h"
@@ -992,7 +991,6 @@ static const char *g_rgValidCommands[] =
 	"OpenSaveGameDialog",
 	"OpenCustomMapsDialog",
 	"OpenOptionsDialog",
-	"OpenBenchmarkDialog",
 	"OpenServerBrowser",
 	"OpenFriendsDialog",
 	"OpenLoadDemoDialog",
@@ -1600,28 +1598,6 @@ CGameMenu *CBasePanel::RecursiveLoadGameMenu(KeyValues *datafile)
 {
 	CGameMenu *menu = new CGameMenu(this, datafile->GetName());
 
-	wchar_t *pString = g_pVGuiLocalize->Find( "#GameUI_Console" );
-
-	if( pString )
-		menu->AddMenuItem("Console", V_wcsupr(pString), "OpenConsole", this);
-	else
-		menu->AddMenuItem("Console", "CONSOLE", "OpenConsole", this);
-
-	bool bFoundServerBrowser = false;
-
-	for (KeyValues *dat = datafile->GetFirstSubKey(); dat != NULL; dat = dat->GetNextKey())
-	{
-		const char *label = dat->GetString("label", "<unknown>");
-		const char *cmd = dat->GetString("command", NULL);
-		const char *name = dat->GetString("name", label);
-
-		if( cmd && Q_strcmp(cmd, "OpenServerBrowser") == 0 )
-			bFoundServerBrowser = true;
-	}
-
-	if( !bFoundServerBrowser && !ModInfo().IsSinglePlayerOnly() )
-		menu->AddMenuItem("AntiM*dG*yButton", "#GameUI_GameMenu_FindServers", "OpenServerBrowser", this);
-
 	// loop through all the data adding items to the menu
 	for (KeyValues *dat = datafile->GetFirstSubKey(); dat != NULL; dat = dat->GetNextKey())
 	{
@@ -1629,8 +1605,14 @@ CGameMenu *CBasePanel::RecursiveLoadGameMenu(KeyValues *datafile)
 		const char *cmd = dat->GetString("command", NULL);
 		const char *name = dat->GetString("name", label);
 
-		if ( cmd && (!Q_stricmp( cmd, "OpenFriendsDialog" )
-			|| !Q_stricmp( cmd, "engine bug" )) )
+		// Never show these, whatever the .res (or a mod) tries to add:
+		// console, server browser, friends, bug report, achievements.
+		if ( cmd && (!Q_stricmp( cmd, "OpenConsole" )
+			|| !Q_stricmp( cmd, "OpenServerBrowser" )
+			|| !Q_stricmp( cmd, "OpenFriendsDialog" )
+			|| !Q_stricmp( cmd, "engine bug" )
+			|| !Q_stricmp( cmd, "OpenAchievementsDialog" )
+			|| !Q_stricmp( cmd, "OpenCSAchievementsDialog" )) )
 			continue;
 
 		menu->AddMenuItem(name, label, cmd, this, dat);
@@ -2095,10 +2077,6 @@ void CBasePanel::RunMenuCommand(const char *command)
 		{
 			OnOpenControllerDialog();
 		}
-	}
-	else if ( !Q_stricmp( command, "OpenBenchmarkDialog" ) )
-	{
-		OnOpenBenchmarkDialog();
 	}
 	else if ( !Q_stricmp( command, "OpenServerBrowser" ) )
 	{
@@ -3264,19 +3242,6 @@ void CBasePanel::OnOpenControllerDialog()
 	}
 
 	m_hControllerDialog->Activate();
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: 
-//-----------------------------------------------------------------------------
-void CBasePanel::OnOpenBenchmarkDialog()
-{
-	if (!m_hBenchmarkDialog.Get())
-	{
-		m_hBenchmarkDialog = new CBenchmarkDialog(this, "BenchmarkDialog");
-		PositionDialog( m_hBenchmarkDialog );
-	}
-	m_hBenchmarkDialog->Activate();
 }
 
 //-----------------------------------------------------------------------------

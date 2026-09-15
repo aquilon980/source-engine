@@ -44,7 +44,6 @@ private:
     MESSAGE_FUNC( OnDataChanged, "ControlModified" );
 	MESSAGE_FUNC_PTR_CHARPTR( OnTextChanged, "TextChanged", panel, text );
 	MESSAGE_FUNC( OpenAdvanced, "OpenAdvanced" );
-	MESSAGE_FUNC( LaunchBenchmark, "LaunchBenchmark" );
 	MESSAGE_FUNC( OpenGammaDialog, "OpenGammaDialog" );
 
    
@@ -63,7 +62,6 @@ private:
 	vgui::ComboBox		*m_pVRMode;
 	vgui::Button		*m_pGammaButton;
 	vgui::Button		*m_pAdvanced;
-	vgui::Button		*m_pBenchmark;
 	vgui::CheckButton	*m_pHDContent;
 
 	vgui::DHANDLE<class COptionsSubVideoAdvancedDlg> m_hOptionsSubVideoAdvancedDlg;
