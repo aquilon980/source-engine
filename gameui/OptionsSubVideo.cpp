@@ -1128,6 +1128,14 @@ COptionsSubVideo::COptionsSubVideo(vgui::Panel *parent) : PropertyPage(parent, N
 
 	LoadControlSettings("Resource\\OptionsSubVideo.res");
 
+	// The Video Stress Test button is created from OptionsSubVideo.res
+	// (it carries "ControlName" Button), not from code — so remove the
+	// control outright. No .res override, and it can't come back.
+	if ( vgui::Panel *pBenchmarkButton = FindChildByName( "BenchmarkButton" ) )
+	{
+		pBenchmarkButton->MarkForDeletion();
+	}
+
 	// Moved down here so we can set the Drop down's
 	// menu state after the default (disabled) value is loaded
 	PrepareResolutionList();

@@ -175,11 +175,11 @@ void CWeaponXM1014::PrimaryAttack()
 
 	if ( pPlayer->GetFlags() & FL_ONGROUND )
 	{
-		angle.x -= SharedRandomInt( "XM1014PunchAngleGround", 3, 5 );
+		angle.x -= SharedRandomInt( "XM1014PunchAngleGround", 3, 5 ) * weapon_recoil_scale.GetFloat();
 	}
 	else
 	{
-		angle.x -= SharedRandomInt( "XM1014PunchAngleAir", 7, 10 );
+		angle.x -= SharedRandomInt( "XM1014PunchAngleAir", 7, 10 ) * weapon_recoil_scale.GetFloat();
 	}
 
 	pPlayer->SetPunchAngle( angle );

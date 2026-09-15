@@ -185,7 +185,7 @@ void CWeaponScout::PrimaryAttack( void )
 	}
 
 	QAngle angle = pPlayer->GetPunchAngle();
-	angle.x -= 2;
+	angle.x -= 2 * weapon_recoil_scale.GetFloat();
 	pPlayer->SetPunchAngle( angle );
 }
 

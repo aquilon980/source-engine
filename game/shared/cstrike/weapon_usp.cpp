@@ -335,7 +335,7 @@ void CWeaponUSP::PrimaryAttack()
 	m_fAccuracyPenalty += GetCSWpnData().m_fInaccuracyImpulseFire[m_weaponMode];
 
 	QAngle angle = pPlayer->GetPunchAngle();
-	angle.x -= 2;
+	angle.x -= 2 * weapon_recoil_scale.GetFloat();
 	pPlayer->SetPunchAngle( angle );
 }
 

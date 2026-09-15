@@ -246,7 +246,7 @@ void CWeaponElite::PrimaryAttack()
 	m_fAccuracyPenalty += GetCSWpnData().m_fInaccuracyImpulseFire[Primary_Mode];
 
 	QAngle punchAngle = pPlayer->GetPunchAngle();
-	punchAngle.x -= 2;
+	punchAngle.x -= 2 * weapon_recoil_scale.GetFloat();
 	pPlayer->SetPunchAngle( punchAngle );
 
 	//ResetPlayerShieldAnim();

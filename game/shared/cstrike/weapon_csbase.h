@@ -26,6 +26,11 @@ extern bool	IsPrimaryWeapon( CSWeaponID id );
 extern bool IsSecondaryWeapon( CSWeaponID  id );
 extern int GetShellForAmmoType( const char *ammoname );
 
+// Defined in game/shared/cstrike/cs_player_shared.cpp. Weapons whose own
+// KickBack bypasses CCSPlayer::KickBack read this directly so the scale
+// covers every gun (see docs/casual-defaults.md).
+extern ConVar weapon_recoil_scale;
+
 #define SHIELD_VIEW_MODEL "models/weapons/v_shield.mdl"
 #define SHIELD_WORLD_MODEL "models/weapons/w_shield.mdl"
 

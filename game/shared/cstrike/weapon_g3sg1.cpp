@@ -177,8 +177,9 @@ void CWeaponG3SG1::PrimaryAttack()
 
 	// Adjust the punch angle.
 	QAngle angle = pPlayer->GetPunchAngle();
-	angle.x -= SharedRandomFloat("G3SG1PunchAngleX", 0.75, 1.75 ) + ( angle.x / 4 );
-	angle.y += SharedRandomFloat("G3SG1PunchAngleY", -0.75, 0.75 );
+	float flRecoilScale = weapon_recoil_scale.GetFloat();
+	angle.x -= ( SharedRandomFloat("G3SG1PunchAngleX", 0.75, 1.75 ) + ( angle.x / 4 ) ) * flRecoilScale;
+	angle.y += SharedRandomFloat("G3SG1PunchAngleY", -0.75, 0.75 ) * flRecoilScale;
 	pPlayer->SetPunchAngle( angle );
 }
 

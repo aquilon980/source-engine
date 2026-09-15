@@ -167,11 +167,11 @@ void CWeaponM3::PrimaryAttack()
 
 	if ( pPlayer->GetFlags() & FL_ONGROUND )
 	{
-		angle.x -= SharedRandomInt( "M3PunchAngleGround", 4, 6 );
+		angle.x -= SharedRandomInt( "M3PunchAngleGround", 4, 6 ) * weapon_recoil_scale.GetFloat();
 	}
 	else
 	{
-		angle.x -= SharedRandomInt( "M3PunchAngleAir", 8, 11 );
+		angle.x -= SharedRandomInt( "M3PunchAngleAir", 8, 11 ) * weapon_recoil_scale.GetFloat();
 	}
 
 	pPlayer->SetPunchAngle( angle );
