@@ -928,6 +928,166 @@ static bool ShouldPreventClientCommand( const ConCommandBase *pCommand )
 // A complete command line has been parsed, so try to execute it
 // FIXME: lookupnoadd the token to speed search?
 //-----------------------------------------------------------------------------
+
+// Fuzzy console matching: "svcheats1", "sv_cheats1", "svcheats 1",
+// "0000sv_cheats 1" and "[[[[svcheats1" all run "sv_cheats 1". The typed token
+// is lowercased, non-alphanumerics are dropped and leading digits are skipped,
+// then it is compared against every registered command/cvar the same way.
+// A trailing remainder becomes an attached argument ("svcheats1" -> "sv_cheats 1").
+// Exact input always wins: this only runs on an exact miss, and the winner is
+// echoed so a surprise mapping is always visible.
+static void Cmd_NormalizeToken( const char *pszIn, char *pszOut, int nOutSize )
+{
+	int nLen = 0;
+	for ( const char *p = pszIn; *p && nLen + 1 < nOutSize; ++p )
+	{
+		char c = *p;
+		if ( c >= 'A' && c <= 'Z' )
+			c += ( 'a' - 'A' );
+		if ( ( c >= 'a' && c <= 'z' ) || ( c >= '0' && c <= '9' ) )
+			pszOut[ nLen++ ] = c;
+	}
+	pszOut[ nLen ] = '\0';
+
+	// Leading digits are junk ("0000sv_cheats" -> "sv_cheats"). A real command
+	// starting with digits can't land here: it would have matched exactly.
+	int nSkip = 0;
+	while ( pszOut[ nSkip ] >= '0' && pszOut[ nSkip ] <= '9' )
+		++nSkip;
+	if ( nSkip > 0 )
+	{
+		for ( int i = 0; i <= nLen - nSkip; ++i )
+			pszOut[ i ] = pszOut[ i + nSkip ];
+	}
+}
+
+// Searches all registered commands/cvars for a fuzzy hit for pszToken.
+// On a unique hit returns the match and writes any attached argument
+// ("" when the token was just a mangled name). Returns NULL when nothing
+// fits; bAmbiguous is set when two or more different names tie.
+static const ConCommandBase *Cmd_FindFuzzyMatch( const char *pszToken, char *pszAttachedArg, int nArgSize, bool &bAmbiguous )
+{
+	pszAttachedArg[ 0 ] = '\0';
+	bAmbiguous = false;
+
+	// Pass A: the typed token starts with a real name, remainder is an
+	// attached argument from the ORIGINAL text ("impulse101" -> "impulse 101",
+	// "give_weapon" -> "give weapon"). Longest name wins.
+	const ConCommandBase *pBest = NULL;
+	int nBestLen = 0;
+	const char *pszBestRemainder = NULL;
+	for ( const ConCommandBase *p = g_pCVar->GetCommands(); p; p = p->GetNext() )
+	{
+		if ( p->IsFlagSet( FCVAR_DEVELOPMENTONLY ) )
+			continue;
+		const char *pszName = p->GetName();
+		int nNameLen = Q_strlen( pszName );
+		if ( nNameLen <= 0 || Q_strnicmp( pszToken, pszName, nNameLen ) != 0 || pszToken[ nNameLen ] == '\0' )
+			continue;
+		if ( nNameLen < nBestLen )
+			continue;
+		if ( nNameLen == nBestLen && pBest && p != pBest )
+		{
+			bAmbiguous = true;
+			continue;
+		}
+		pBest = p;
+		nBestLen = nNameLen;
+		pszBestRemainder = pszToken + nNameLen;
+		bAmbiguous = false;
+	}
+	if ( pBest && !bAmbiguous )
+	{
+		// Skip junk separators between name and attached argument.
+		while ( *pszBestRemainder == '_' || *pszBestRemainder == '-' )
+			++pszBestRemainder;
+		Q_strncpy( pszAttachedArg, pszBestRemainder, nArgSize );
+		return pBest;
+	}
+	if ( bAmbiguous )
+		return NULL;
+
+	// Pass B: normalized match ("svcheats" -> "sv_cheats", "[[[[svcheats1" ->
+	// "sv_cheats" + "1"). Longest normalized name wins.
+	char szToken[ 512 ];
+	Cmd_NormalizeToken( pszToken, szToken, sizeof( szToken ) );
+	if ( szToken[ 0 ] == '\0' )
+		return NULL;
+
+	pBest = NULL;
+	nBestLen = 0;
+	const char *pszBestNormRemainder = NULL;
+	char szName[ 256 ];
+	for ( const ConCommandBase *p = g_pCVar->GetCommands(); p; p = p->GetNext() )
+	{
+		if ( p->IsFlagSet( FCVAR_DEVELOPMENTONLY ) )
+			continue;
+		Cmd_NormalizeToken( p->GetName(), szName, sizeof( szName ) );
+		int nNameLen = Q_strlen( szName );
+		if ( nNameLen <= 0 || Q_strnicmp( szToken, szName, nNameLen ) != 0 )
+			continue;
+		if ( nNameLen < nBestLen )
+			continue;
+		if ( nNameLen == nBestLen && pBest && p != pBest )
+		{
+			// Same normalized length but different commands: only ambiguous
+			// if they actually tie on the same text.
+			if ( Q_strcmp( pBest->GetName(), p->GetName() ) != 0 )
+			{
+				bAmbiguous = true;
+				continue;
+			}
+		}
+		pBest = p;
+		nBestLen = nNameLen;
+		pszBestNormRemainder = szToken + nNameLen;
+		bAmbiguous = false;
+	}
+	if ( pBest && !bAmbiguous )
+	{
+		Q_strncpy( pszAttachedArg, pszBestNormRemainder, nArgSize );
+		return pBest;
+	}
+	return NULL;
+}
+
+static int s_nFuzzyDepth = 0;
+
+// Runs pszToken through the fuzzy matcher and, on a unique hit, executes the
+// corrected command line through the normal path (cheat flags, forwarding,
+// everything). Returns the dispatch result, or NULL with bAmbiguous set when
+// the token could be several commands.
+static const ConCommandBase *Cmd_TryFuzzyCommand( const CCommand &command, cmd_source_t src, int nClientSlot, bool &bAmbiguous )
+{
+	bAmbiguous = false;
+	if ( s_nFuzzyDepth > 0 || command.ArgC() < 1 )
+		return NULL;
+
+	char szAttached[ 512 ];
+	const ConCommandBase *pMatch = Cmd_FindFuzzyMatch( command[ 0 ], szAttached, sizeof( szAttached ), bAmbiguous );
+	if ( !pMatch )
+		return NULL;
+
+	char szCorrected[ 512 ];
+	if ( szAttached[ 0 ] )
+		Q_snprintf( szCorrected, sizeof( szCorrected ), "%s %s %s", pMatch->GetName(), szAttached, command.ArgS() );
+	else if ( command.ArgS()[ 0 ] )
+		Q_snprintf( szCorrected, sizeof( szCorrected ), "%s %s", pMatch->GetName(), command.ArgS() );
+	else
+		Q_snprintf( szCorrected, sizeof( szCorrected ), "%s", pMatch->GetName() );
+
+	Msg( "Matched \"%s\" to \"%s\"\n", command.GetCommandString(), szCorrected );
+
+	CCommand fuzzy;
+	if ( !fuzzy.Tokenize( szCorrected, CCommand::DefaultBreakSet() ) )
+		return NULL;
+
+	++s_nFuzzyDepth;
+	const ConCommandBase *pResult = Cmd_ExecuteCommand( fuzzy, src, nClientSlot );
+	--s_nFuzzyDepth;
+	return pResult;
+}
+
 const ConCommandBase *Cmd_ExecuteCommand( const CCommand &command, cmd_source_t src, int nClientSlot )
 {	
 	// execute the command line
@@ -1067,6 +1227,18 @@ const ConCommandBase *Cmd_ExecuteCommand( const CCommand &command, cmd_source_t 
 			Cmd_ForwardToServer( command );
 			return NULL;
 		}
+	}
+
+	// Exact miss: try the fuzzy matcher (ignores spaces/underscores/junk,
+	// splits off attached arguments). Exact input always wins over this.
+	bool bAmbiguous = false;
+	const ConCommandBase *pFuzzy = Cmd_TryFuzzyCommand( command, src, nClientSlot, bAmbiguous );
+	if ( pFuzzy )
+		return pFuzzy;
+	if ( bAmbiguous )
+	{
+		Msg( "Ambiguous command \"%s\" (matches more than one command)\n", command[0] );
+		return NULL;
 	}
 	
 	Msg( "Unknown command \"%s\"\n", command[0] );
