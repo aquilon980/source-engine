@@ -65,7 +65,6 @@ static ConVar smoke_mold_enable( "smoke_mold_enable", "1", FCVAR_ARCHIVE, "Smoke
 static ConVar smoke_bloom_time( "smoke_bloom_time", "1.4", FCVAR_ARCHIVE, "Seconds for the smoke cloud to bloom to full size.", true, 0.5f, true, 3.0f );
 static ConVar smoke_core( "smoke_core", "0.45", FCVAR_ARCHIVE, "Fraction of the cloud that stays fully dense (soft edge outside it).", true, 0.2f, true, 0.8f );
 static ConVar smoke_brightness( "smoke_brightness", "1.0", FCVAR_ARCHIVE, "Smoke puff brightness multiplier.", true, 0.4f, true, 1.6f );
-static ConVar smoke_debug( "smoke_debug", "0", 0, "Log smoke mold/carve diagnostics to the console (goes to console.log)." );
 
 // Same pattern as c_func_smokevolume/c_smokestack: low-end lever that halves
 // the cloud to a checkerboard when the user opts out of dense particles.
@@ -278,7 +277,6 @@ private:
 	enum { MAX_CARVE_HOLES = 8 };
 	SmokeHole_t			m_CarveHoles[MAX_CARVE_HOLES];
 	int					m_nCarveHoles;
-	float				m_flLastHoleDebug;
 
 	C_SmokeTrail		m_SmokeTrail;
 };
@@ -420,7 +418,6 @@ C_ParticleSmokeGrenade::C_ParticleSmokeGrenade()
 	m_bVolumeFilled = false;
 	m_CurrentStage = 0;
 	m_nCarveHoles = 0;
-	m_flLastHoleDebug = 0;
 
 	m_bStarted = false;
 }
@@ -912,7 +909,6 @@ void C_ParticleSmokeGrenade::RenderParticles( CParticleRenderIterator *pIterator
 	// Hoisted: ConVar reads don't belong in the per-puff loop.
 	float flCutoff = clamp( smoke_core.GetFloat(), 0.2f, 0.8f );
 	float flBright = smoke_brightness.GetFloat();
-	int nRaySuppressed = 0;
 
 	while ( pParticle )
 	{
@@ -987,10 +983,7 @@ void C_ParticleSmokeGrenade::RenderParticles( CParticleRenderIterator *pIterator
 			{
 				float flHoleSuppress = HoleSuppressAt( vWorldSpacePos );
 				if ( flHoleSuppress > 0.0f )
-				{
 					alpha *= ( 1.0f - flHoleSuppress );
-					nRaySuppressed++;
-				}
 			}
 
 			// TODO: optimize this whole routine!
@@ -1042,14 +1035,6 @@ void C_ParticleSmokeGrenade::RenderParticles( CParticleRenderIterator *pIterator
 		}
 
 		pParticle = (SmokeGrenadeParticle*)pIterator->GetNext( sortKey );
-	}
-
-	if ( smoke_debug.GetBool() && nRaySuppressed > 0 &&
-		 ( gpGlobals->curtime - m_flLastHoleDebug ) > 0.5f )
-	{
-		m_flLastHoleDebug = gpGlobals->curtime;
-		Msg( "smoke_debug: carve hole cleared %d puffs (%d live holes)\n",
-			 nRaySuppressed, m_nCarveHoles );
 	}
 }
 
@@ -1327,9 +1312,6 @@ void C_ParticleSmokeGrenade::FillVolume()
 			}
 		}
 	}
-
-	if ( smoke_debug.GetBool() )
-		Msg( "smoke_debug: fill lift %.0f mold %d\n", m_vecBaseLift.z, bMold ? 1 : 0 );
 }
 
 //-----------------------------------------------------------------------------
@@ -1505,10 +1487,6 @@ void C_ParticleSmokeGrenade::ApplyBulletSegment( const Vector &vecStart, const V
 		vCenter = m_SmokeBasePos + vToCenter * ( flMaxOff / MAX( 1.0f, flLen ) );
 
 	AddCarveHole( vCenter, flRadius, flStrength, MAX( 0.2f, smoke_bullet_recover.GetFloat() ) );
-
-	if ( smoke_debug.GetBool() )
-		Msg( "smoke_debug: bullet hole (%.0f %.0f %.0f) r %.0f, %d live\n",
-			 vCenter.x, vCenter.y, vCenter.z, flRadius, m_nCarveHoles );
 }
 
 
@@ -1586,9 +1564,7 @@ void ReactiveSmoke_OnBulletSegment( const Vector &vecStart, const Vector &vecEnd
 
 #if CSTRIKE_DLL
 	ReactiveSmoke_SegmentCtx_t ctx = { &vecStart, &vecEnd };
-	int nSmokes = ReactiveSmoke_ForEachSmoke( ReactiveSmoke_ApplySegment, &ctx );
-	if ( smoke_debug.GetBool() )
-		Msg( "smoke_debug: bullet segment, %d smokes tracked\n", nSmokes );
+	ReactiveSmoke_ForEachSmoke( ReactiveSmoke_ApplySegment, &ctx );
 #endif
 }
 
