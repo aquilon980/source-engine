@@ -91,6 +91,11 @@ struct BobState_t
 		m_flLateralBob = 0;
 		m_flRawVerticalBob = 0;
 		m_flRawLateralBob = 0;
+		m_flStepInterval = 0.30f;
+		m_flLastStepTimer = -1.0f;
+		m_flStepPhase = 0.0f;
+		m_flStepBlend = 0.0f;
+		m_nStepParity = 0;
 	}
 
 	float m_flBobTime;
@@ -100,6 +105,15 @@ struct BobState_t
 	float m_flLateralBob;
 	float m_flRawVerticalBob;
 	float m_flRawLateralBob;
+	// Footfall sync: latched step interval (seconds), last observed step
+	// timer (ms, -1 = unseen), free-running render phase (radians), blend
+	// 0 = free-run → 1 = step-locked, and stride parity (alternates the
+	// lateral extreme each footfall).
+	float m_flStepInterval;
+	float m_flLastStepTimer;
+	float m_flStepPhase;
+	float m_flStepBlend;
+	int m_nStepParity;
 };
 
 float CalcViewModelBobHelper( CBasePlayer *player, BobState_t *pBobState, float flMaxSpeed );

@@ -410,6 +410,9 @@ protected:
 
 public:
 	int m_StuckLast;
+
+	// viewmodel bob sync reads the step timer (ms until the next footfall)
+	float GetStepSoundTime() const { return m_flStepSoundTime; }
 	
 	// Data for only the local player
 	CNetworkVarEmbedded( CPlayerLocalData, m_Local );

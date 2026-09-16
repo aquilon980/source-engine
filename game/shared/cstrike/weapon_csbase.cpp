@@ -1673,6 +1673,10 @@ bool CWeaponCSBase::IsUseable()
 	// CSO-style viewmodel bob, ported from FJH03/CSSO-NOOFFICIAL-MP.
 	// 0 = classic CS:S bob below, 1 = CS:GO-style bob via the helpers.
 	ConVar	cl_use_new_headbob( "cl_use_new_headbob", "1", FCVAR_ARCHIVE, "What viewbob style to use: CS:S (0) or CS:GO (1)." );
+	// 1 = lock the bob cycle to real footfalls (see below), 0 = free-run on
+	// m_flBobTime like before. Step-locked is exact on the ground and
+	// free-runs at the last stride rate in the air, so it never pops.
+	ConVar	cl_bob_sync( "cl_bob_sync", "1", FCVAR_ARCHIVE, "Sync the viewmodel bob cycle to footfalls (1) or free-run it (0)." );
 	static ConVar	cl_bobamt_vert( "cl_bobamt_vert", "0.25", FCVAR_ARCHIVE, "The amount the viewmodel moves up and down when running", true, 0.1, true, 2 );
 	static ConVar	cl_bobamt_lat( "cl_bobamt_lat", "0.4", FCVAR_ARCHIVE, "The amount the viewmodel moves side to side when running", true, 0.1, true, 2 );
 	static ConVar	cl_bob_lower_amt( "cl_bob_lower_amt", "21", FCVAR_ARCHIVE, "The amount the viewmodel lowers when running", true, 5, true, 30 );
@@ -1705,6 +1709,55 @@ bool CWeaponCSBase::IsUseable()
 
 		float flmaxSpeedDelta = MAX( 0, (gpGlobals->curtime - pBobState->m_flLastBobTime) * 640.0f );
 
+		// Footfall sync (cl_bob_sync): derive the bob phase from the player's
+		// step timer (ms until the next footstep) instead of free-running
+		// m_flBobTime. The timer counts interval -> 0, fires the step, and
+		// resets, so one derived cycle is exactly one stride at ANY rate
+		// (300ms running, 400 walking, ladder, water, ducked) with no drift.
+		// Airborne/idle the timer sits at 0, so the phase free-runs at the
+		// last stride rate instead of freezing mid-pose; a short blend eases
+		// back to the exact lock on the next footfall, so it never pops.
+		float flDt = MAX( 0.0f, gpGlobals->curtime - pBobState->m_flLastBobTime );
+		float flStepTimer = player->GetStepSoundTime();
+		if ( pBobState->m_flLastStepTimer >= 0.0f && flStepTimer > pBobState->m_flLastStepTimer + 1.0f )
+		{
+			// The timer jumped upward: a footfall just fired. Latch its
+			// interval and alternate the lateral extreme.
+			pBobState->m_flStepInterval = clamp( flStepTimer * 0.001f, 0.15f, 0.8f );
+			pBobState->m_nStepParity++;
+		}
+		float flStride = MAX( 0.15f, pBobState->m_flStepInterval );
+		if ( flStepTimer > 0.5f )
+		{
+			// Step cycle active: ease the lock fully on (exact within a stride).
+			pBobState->m_flStepBlend = MIN( 1.0f, pBobState->m_flStepBlend + flDt * 8.0f );
+		}
+		else
+		{
+			// No step cycle: ease the lock off.
+			pBobState->m_flStepBlend = MAX( 0.0f, pBobState->m_flStepBlend - flDt * 8.0f );
+		}
+		pBobState->m_flStepPhase += ( 2.0f * M_PI * flDt ) / flStride;
+		pBobState->m_flLastStepTimer = flStepTimer;
+
+		// Derived phase: 0 at each footfall, +2PI per stride.
+		float flP = 1.0f - clamp( flStepTimer * 0.001f / flStride, 0.0f, 1.0f );
+		float flDerived = flP * 2.0f * M_PI;
+		float flErr = flDerived - pBobState->m_flStepPhase;
+		flErr -= 2.0f * M_PI * floorf( flErr / ( 2.0f * M_PI ) + 0.5f );
+		float flRenderPhase = pBobState->m_flStepPhase + flErr * pBobState->m_flStepBlend;
+		float flPRender = flRenderPhase / ( 2.0f * M_PI ) - floorf( flRenderPhase / ( 2.0f * M_PI ) );
+
+		// cycle01 drives the existing cl_bobup warp below. Vertical hits its
+		// minimum (gun dips) exactly on the footfall; lateral hits alternating
+		// extremes on alternating feet and crosses center mid-stride.
+		// (cycle01 0.25/0.75 are the warp's sin extremes for cl_bobup 0.5.)
+		float flCycle01V = flPRender + 0.75f;
+		if ( flCycle01V >= 1.0f )
+			flCycle01V -= 1.0f;
+		float flCycle01L = flPRender * 0.5f + (float)( pBobState->m_nStepParity & 1 ) * 0.5f + 0.25f;
+		flCycle01L -= floorf( flCycle01L );
+
 		// don't allow too big speed changes
 		speed = clamp( speed, pBobState->m_flLastSpeed - flmaxSpeedDelta, pBobState->m_flLastSpeed + flmaxSpeedDelta );
 		speed = clamp( speed, -320.0f, 320.0f );
@@ -1724,8 +1777,12 @@ bool CWeaponCSBase::IsUseable()
 		float flBobCycle = (((1000.0f - flMaxSpeed) / 3.5f) * 0.001f) * cl_bobcycle.GetFloat();
 
 		//Calculate the vertical bob
-		cycle = pBobState->m_flBobTime - (int)(pBobState->m_flBobTime / flBobCycle)*flBobCycle;
-		cycle /= flBobCycle;
+		cycle = flCycle01V;
+		if ( !cl_bob_sync.GetBool() )
+		{
+			cycle = pBobState->m_flBobTime - (int)(pBobState->m_flBobTime / flBobCycle)*flBobCycle;
+			cycle /= flBobCycle;
+		}
 
 		if ( cycle < cl_bobup.GetFloat() )
 		{
@@ -1748,8 +1805,12 @@ bool CWeaponCSBase::IsUseable()
 		pBobState->m_flVerticalBob = clamp( (pBobState->m_flVerticalBob - flRunAddAmt), -7.0f, 4.0f );
 
 		//Calculate the lateral bob
-		cycle = pBobState->m_flBobTime - (int)(pBobState->m_flBobTime / flBobCycle * 2)*flBobCycle * 2;
-		cycle /= flBobCycle * 2;
+		cycle = flCycle01L;
+		if ( !cl_bob_sync.GetBool() )
+		{
+			cycle = pBobState->m_flBobTime - (int)(pBobState->m_flBobTime / flBobCycle * 2)*flBobCycle * 2;
+			cycle /= flBobCycle * 2;
+		}
 
 		if ( cycle < cl_bobup.GetFloat() )
 		{
