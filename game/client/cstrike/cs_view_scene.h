@@ -38,6 +38,7 @@ private:
 	ITexture *m_pFlashTexture;
 
 	float m_flSmokeOverlayAmount;
+	int m_nSmokeOverlayFrame;
 };
 
 #endif //CS_VIEW_SCENE_H

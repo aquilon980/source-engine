@@ -53,6 +53,7 @@ CCSViewRender::CCSViewRender()
 	view = ( IViewRender * )&g_ViewRender;
 	m_pFlashTexture = NULL;
 	m_flSmokeOverlayAmount = 0.0f;
+	m_nSmokeOverlayFrame = -1;
 }
 
 struct ConVarFlags
@@ -316,13 +317,26 @@ void CCSViewRender::RenderSmokeOverlay( bool bPreViewModel )
 		return;
 	}
 
-	// Fast attack, slow release — stepping out of the smoke fades instead of popping.
-	float flTarget = clamp( g_SmokeFogOverlayAlpha, 0.0f, 1.0f );
-	if ( flTarget < m_flSmokeOverlayAmount )
+	// Smooth once per frame (both the pre- and post-viewmodel passes run
+	// through here). Fast attack, slow release — walking in reads as
+	// instant, stepping out fades instead of popping. The attack is finite
+	// on purpose: the fog target is rebuilt raw every frame from the live
+	// carve holes, so a single-frame spike used to snap the whole screen
+	// white — that was the in-smoke rapid flash.
+	if ( m_nSmokeOverlayFrame != gpGlobals->framecount )
 	{
-		flTarget = Approach( flTarget, m_flSmokeOverlayAmount, gpGlobals->frametime * 4.5f );
+		m_nSmokeOverlayFrame = gpGlobals->framecount;
+		float flTarget = clamp( g_SmokeFogOverlayAlpha, 0.0f, 1.0f );
+		if ( flTarget < m_flSmokeOverlayAmount )
+		{
+			flTarget = Approach( flTarget, m_flSmokeOverlayAmount, gpGlobals->frametime * 4.5f );
+		}
+		else
+		{
+			flTarget = Approach( flTarget, m_flSmokeOverlayAmount, gpGlobals->frametime * 12.0f );
+		}
+		m_flSmokeOverlayAmount = flTarget;
 	}
-	m_flSmokeOverlayAmount = flTarget;
 
 	if ( m_flSmokeOverlayAmount <= 0.0f )
 		return;
