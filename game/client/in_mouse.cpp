@@ -88,19 +88,11 @@ static ConVar m_side( "m_side","0.8", FCVAR_ARCHIVE, "Mouse side factor." );
 static ConVar m_yaw( "m_yaw","0.022", FCVAR_ARCHIVE, "Mouse yaw factor." );
 static ConVar m_forward( "m_forward","1", FCVAR_ARCHIVE, "Mouse forward factor." );
 
-static ConVar m_customaccel( "m_customaccel", "0", FCVAR_ARCHIVE, "Custom mouse acceleration:"
-	"\n0: custom accelaration disabled"
-	"\n1: mouse_acceleration = min(m_customaccel_max, pow(raw_mouse_delta, m_customaccel_exponent) * m_customaccel_scale + sensitivity)"
-	"\n2: Same as 1, with but x and y sensitivity are scaled by m_pitch and m_yaw respectively."
-	"\n3: mouse_acceleration = pow(raw_mouse_delta, m_customaccel_exponent - 1) * sensitivity"
-	);
-static ConVar m_customaccel_scale( "m_customaccel_scale", "0.04", FCVAR_ARCHIVE, "Custom mouse acceleration value.", true, 0, false, 0.0f );
-static ConVar m_customaccel_max( "m_customaccel_max", "0", FCVAR_ARCHIVE, "Max mouse move scale factor, 0 for no limit" );
-static ConVar m_customaccel_exponent( "m_customaccel_exponent", "1", FCVAR_ARCHIVE, "Mouse move is raised to this power before being scaled by scale factor.", true, 1.0f, false, 0.0f);
-
-static ConVar m_mousespeed( "m_mousespeed", "1", FCVAR_ARCHIVE, "Windows mouse acceleration (0 to disable, 1 to enable [Windows 2000: enable initial threshold], 2 to enable secondary threshold [Windows 2000 only]).", true, 0, true, 2 );
-static ConVar m_mouseaccel1( "m_mouseaccel1", "0", FCVAR_ARCHIVE, "Windows mouse acceleration initial threshold (2x movement).", true, 0, false, 0.0f );
-static ConVar m_mouseaccel2( "m_mouseaccel2", "0", FCVAR_ARCHIVE, "Windows mouse acceleration secondary threshold (4x movement).", true, 0, false, 0.0f );
+// Mouse acceleration is removed entirely (see docs/mouse-accel-off.md):
+// m_customaccel / m_customaccel_scale / m_customaccel_max /
+// m_customaccel_exponent and the Windows OS thresholds
+// (m_mousespeed / m_mouseaccel1 / m_mouseaccel2) no longer exist. The mouse is
+// always linear: raw delta * sensitivity.
 
 static ConVar m_rawinput( "m_rawinput", "0", FCVAR_ARCHIVE, "Use Raw Input for mouse input.");
 
@@ -197,9 +189,11 @@ void CInput::CheckMouseAcclerationVars()
 
 	int values[ NUM_MOUSE_PARAMS ];
 
-	values[ MOUSE_SPEED_FACTOR ]		= m_mousespeed.GetInt();
-	values[ MOUSE_ACCEL_THRESHHOLD1 ]	= m_mouseaccel1.GetInt();
-	values[ MOUSE_ACCEL_THRESHHOLD2 ]	= m_mouseaccel2.GetInt();
+	// Mouse acceleration is removed entirely (see docs/mouse-accel-off.md):
+	// the OS mouse-accel thresholds are pinned off, always.
+	values[ MOUSE_SPEED_FACTOR ]		= 0;
+	values[ MOUSE_ACCEL_THRESHHOLD1 ]	= 0;
+	values[ MOUSE_ACCEL_THRESHHOLD2 ]	= 0;
 
 	bool dirty = false;
 
@@ -214,24 +208,7 @@ void CInput::CheckMouseAcclerationVars()
 			dirty = true;
 			m_rgNewMouseParms[ i ] = values[ i ];
 
-			char const *name = "";
-			switch ( i )
-			{
-			default:
-			case MOUSE_SPEED_FACTOR:
-				name = "m_mousespeed";
-				break;
-			case MOUSE_ACCEL_THRESHHOLD1:
-				name = "m_mouseaccel1";
-				break;
-			case MOUSE_ACCEL_THRESHHOLD2:
-				name = "m_mouseaccel2";
-				break;
-			}
-
-			char sz[ 256 ];
-			Q_snprintf( sz, sizeof( sz ), "Mouse parameter '%s' set to %i\n", name, values[ i ] );
-			DevMsg( "%s", sz );
+			DevMsg( "Mouse parameter %i set to %i\n", i, values[ i ] );
 		}
 	}
 
@@ -395,52 +372,13 @@ void CInput::GetMouseDelta( float inmousex, float inmousey, float *pOutMouseX, f
 //-----------------------------------------------------------------------------
 void CInput::ScaleMouse( float *x, float *y )
 {
-	float mx = *x;
-	float my = *y;
-
+	// No mouse acceleration (removed entirely — see docs/mouse-accel-off.md):
+	// the raw delta is always scaled by sensitivity alone.
 	float mouse_sensitivity = ( gHUD.GetSensitivity() != 0 ) 
 		?  gHUD.GetSensitivity() : sensitivity.GetFloat();
 
-	if ( m_customaccel.GetInt() == 1 ||  m_customaccel.GetInt() == 2 ) 
-	{ 
-		float raw_mouse_movement_distance = sqrt( mx * mx + my * my );
-		float acceleration_scale = m_customaccel_scale.GetFloat();
-		float accelerated_sensitivity_max = m_customaccel_max.GetFloat();
-		float accelerated_sensitivity_exponent = m_customaccel_exponent.GetFloat();
-		float accelerated_sensitivity = ( (float)pow( raw_mouse_movement_distance, accelerated_sensitivity_exponent ) * acceleration_scale + mouse_sensitivity );
-
-		if ( accelerated_sensitivity_max > 0.0001f && 
-			accelerated_sensitivity > accelerated_sensitivity_max )
-		{
-			accelerated_sensitivity = accelerated_sensitivity_max;
-		}
-
-		*x *= accelerated_sensitivity; 
-		*y *= accelerated_sensitivity; 
-
-		// Further re-scale by yaw and pitch magnitude if user requests alternate mode 2/4
-		// This means that they will need to up their value for m_customaccel_scale greatly (>40x) since m_pitch/yaw default
-		//  to 0.022
-		if ( m_customaccel.GetInt() == 2 || m_customaccel.GetInt() == 4 )
-		{ 
-			*x *= m_yaw.GetFloat(); 
-			*y *= m_pitch->GetFloat(); 
-		} 
-	}
-	else if ( m_customaccel.GetInt() == 3 )
-	{
-		float raw_mouse_movement_distance_squared = mx * mx + my * my;
-		float fExp = MAX(0.0f, (m_customaccel_exponent.GetFloat() - 1.0f) / 2.0f);
-		float accelerated_sensitivity = powf( raw_mouse_movement_distance_squared, fExp ) * mouse_sensitivity;
-
-		*x *= accelerated_sensitivity; 
-		*y *= accelerated_sensitivity; 
-	}
-	else
-	{ 
-		*x *= mouse_sensitivity;
-		*y *= mouse_sensitivity;
-	}
+	*x *= mouse_sensitivity;
+	*y *= mouse_sensitivity;
 }
 
 //-----------------------------------------------------------------------------
