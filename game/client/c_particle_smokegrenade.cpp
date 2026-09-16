@@ -41,6 +41,11 @@ static Vector s_FadePlaneDirections[] =
 // This is used to randomize the direction it chooses to move a particle in.
 int g_OffsetLookup[3] = {-1,0,1};
 
+// Carve holes are widened by this factor inside the view-cone test, so the
+// neighbouring 80u puffs (which would otherwise overdraw the gap) are cleared
+// too — the difference between "thinner smoke" and "a hole you see through".
+#define SMOKE_HOLE_FATTEN	1.6f
+
 
 // CS2-style reactive smoke (see docs/smoke-reactive.md): bullets punch
 // short-lived tunnels, HE blasts clear a sphere that refills in place.
@@ -87,7 +92,6 @@ private:
 		float				m_RotationSpeed;
 		float				m_CurRotation;
 		float				m_FadeAlpha;		// Set as it moves around.
-		float				m_Suppress;			// CS2-style carve: 0 = full smoke, 1 = cleared.
 		float				m_flSize;			// Base puff size (bloom + fade scale it).
 		unsigned char		m_ColorInterp;		// Amount between min and max colors.
 		unsigned char		m_Color[4];
@@ -142,8 +146,6 @@ private:
 		float					m_TradeClock;		// How long since they started trading.
 		float					m_TradeDuration;	// How long the trade will take to finish.
 		float					m_FadeAlpha;		// Calculated from nearby world geometry.
-		float					m_BulletSuppress;	// CS2-style: bullet carve, refills fast.
-		float					m_BlastSuppress;	// CS2-style: HE clear, refills slow.
 		Vector					m_MoldPos;			// Molded local offset (wall-pulled, ground-clamped).
 		bool					m_bMolded;			// False for culled (inside-solid) cells.
 		unsigned char			m_Color[4];
@@ -151,6 +153,11 @@ private:
 
 	void ApplyDynamicLight( const Vector &vParticlePos, Vector &color );
 	void UpdateDynamicLightList( const Vector &vMins, const Vector &vMaxs );
+
+	// 0 = full smoke, 1 = fully cleared by a carve hole, at this world position.
+	float HoleSuppressAt( const Vector &vWorldPos );
+	// Punch a round hole into the cloud (ring of MAX_CARVE_HOLES, oldest recycled).
+	void AddCarveHole( const Vector &vCenter, float flRadius, float flStrength, float flLife );
 
 	void UpdateSmokeTrail( float fTimeDelta );
 	
@@ -254,6 +261,25 @@ private:
 	float				m_flFadeT;				// 0-1 global fade progress (drives patchy dissolve).
 	Vector				m_vecBaseLift;			// Ground-snap lift applied to the base every frame.
 
+	// CS2-style reactive carve (see docs/smoke-reactive.md). A shot punches a
+	// round hole you can see through: we store each hole's world-space centre
+	// and radius, then at render time suppress every puff whose sight line from
+	// the eye falls inside the cone that hole subtends. That is a circular hole
+	// through the *whole* cloud depth — not just the cells on the bullet's
+	// axis, which neighbours overdraw back. Holes open fast, hold, then refill.
+	struct SmokeHole_t
+	{
+		Vector	vCenter;
+		float	flRadius;
+		float	flStrength;		// 0..1 how opaque the hole stays at full open
+		float	flBirth;
+		float	flLife;			// seconds from birth to fully refilled
+	};
+	enum { MAX_CARVE_HOLES = 8 };
+	SmokeHole_t			m_CarveHoles[MAX_CARVE_HOLES];
+	int					m_nCarveHoles;
+	float				m_flLastHoleDebug;
+
 	C_SmokeTrail		m_SmokeTrail;
 };
 
@@ -303,6 +329,19 @@ static inline float ReactiveSmokeDistPointToSegment( const Vector &vPoint, const
 	float flT = DotProduct( vPoint - vStart, vSeg ) / flLenSqr;
 	flT = clamp( flT, 0.0f, 1.0f );
 	return ( vPoint - ( vStart + vSeg * flT ) ).Length();
+}
+
+// Closest point on a segment to a point. Used to place a carve hole where the
+// bullet passed nearest the middle of the cloud (its midpoint may be far
+// outside, e.g. on a long shot at a wall well behind the smoke).
+static inline Vector ReactiveSmokeClosestPointOnSegment( const Vector &vPoint, const Vector &vStart, const Vector &vEnd )
+{
+	Vector vSeg = vEnd - vStart;
+	float flLenSqr = vSeg.LengthSqr();
+	if ( flLenSqr < 1e-6f )
+		return vStart;
+	float flT = clamp( DotProduct( vPoint - vStart, vSeg ) / flLenSqr, 0.0f, 1.0f );
+	return vStart + vSeg * flT;
 }
 
 static inline void WorldTraceLine( const Vector &start, const Vector &end, int contentsMask, trace_t *trace )
@@ -380,6 +419,8 @@ C_ParticleSmokeGrenade::C_ParticleSmokeGrenade()
 	m_flSpawnTime = 0;
 	m_bVolumeFilled = false;
 	m_CurrentStage = 0;
+	m_nCarveHoles = 0;
+	m_flLastHoleDebug = 0;
 
 	m_bStarted = false;
 }
@@ -477,22 +518,6 @@ void C_ParticleSmokeGrenade::ClientThink()
 		
 		if(testDist < fadeEnd)
 		{
-			// CS2-style: carved/cleared smoke fogs the screen less. Average the
-			// per-cell clear amounts so the overlay tracks the visible puffs.
-			float flSuppressSum = 0.0f;
-			float flMaxSuppress = 0.0f;
-			int nSuppressCount = 0;
-			int nTotalFog = m_xCount * m_yCount * m_zCount;
-			for ( int iFog = 0; iFog < nTotalFog; iFog++ )
-			{
-				SmokeParticleInfo *pFogInfo = &m_SmokeParticleInfos[iFog];
-				if ( !pFogInfo->m_pParticle )
-					continue;
-				float flCellSuppress = MAX( pFogInfo->m_BulletSuppress, pFogInfo->m_BlastSuppress );
-				flSuppressSum += flCellSuppress;
-				flMaxSuppress = MAX( flMaxSuppress, flCellSuppress );
-				nSuppressCount++;
-			}
 			// Median-patch fade: the overlay follows what a mid-dissolve
 			// patch shows, not the unstaggered global — otherwise the
 			// insider stays fogged while staring through a clear hole.
@@ -500,13 +525,12 @@ void C_ParticleSmokeGrenade::ClientThink()
 			float flFogAlpha = 1.0f - flMedT * flMedT * ( 3.0f - 2.0f * flMedT );
 			if ( m_SpacingRadius > 0.0f )
 				flFogAlpha *= m_ExpandRadius / (m_SpacingRadius*2);
-			if ( nSuppressCount > 0 )
-			{
-				flFogAlpha *= 1.0f - ( flSuppressSum / (float)nSuppressCount );
-				// Two-way carve: the clearest hole clears the insider's
-				// fog too, so a tunnel works both ways like CS2.
-				flFogAlpha *= 1.0f - 0.5f * flMaxSuppress;
-			}
+
+			// A carve hole you're looking through clears the screen fog too,
+			// so the insider sees out (two-way carve). Test the cloud centre
+			// against the live holes; the cone is anchored to the eye, so
+			// looking into the hole reads as suppression here.
+			flFogAlpha *= 1.0f - HoleSuppressAt( m_SmokeBasePos );
 
 			if( testDist < flCoreDistance )
 			{
@@ -585,12 +609,6 @@ inline void C_ParticleSmokeGrenade::UpdateParticleDuringTrade( int iParticle, fl
 			pInfo->m_pParticle->m_FadeAlpha  = pInfo->m_FadeAlpha + (pOther->m_FadeAlpha - pInfo->m_FadeAlpha) * (1 - percent);
 			pOther->m_pParticle->m_FadeAlpha = pInfo->m_FadeAlpha + (pOther->m_FadeAlpha - pInfo->m_FadeAlpha) * percent;
 
-			// CS2-style: the carve amount rides along with the trade.
-			float flSuppressA = MAX( pInfo->m_BulletSuppress, pInfo->m_BlastSuppress );
-			float flSuppressB = MAX( pOther->m_BulletSuppress, pOther->m_BlastSuppress );
-			pInfo->m_pParticle->m_Suppress  = flSuppressA + (flSuppressB - flSuppressA) * (1 - percent);
-			pOther->m_pParticle->m_Suppress = flSuppressA + (flSuppressB - flSuppressA) * percent;
-
 			InterpColor(pInfo->m_pParticle->m_Color,  pInfo->m_Color, pOther->m_Color, 1-percent);
 			InterpColor(pOther->m_pParticle->m_Color, pInfo->m_Color, pOther->m_Color, percent);
 
@@ -609,9 +627,6 @@ void C_ParticleSmokeGrenade::UpdateParticleAndFindTrade( int iParticle, float fT
 	pInfo->m_pParticle->m_Color[0] = pInfo->m_Color[0];
 	pInfo->m_pParticle->m_Color[1] = pInfo->m_Color[1];
 	pInfo->m_pParticle->m_Color[2] = pInfo->m_Color[2];
-
-	// CS2-style: carry the carve amount onto the visible particle.
-	pInfo->m_pParticle->m_Suppress = MAX( pInfo->m_BulletSuppress, pInfo->m_BlastSuppress );
 
 	// Is there an adjacent one that's not trading?
 	int x, y, z;
@@ -731,22 +746,23 @@ void C_ParticleSmokeGrenade::Update(float fTimeDelta)
 
 	if(m_CurrentStage == 1)
 	{
+		// Retire spent carve holes (swap-remove; order doesn't matter).
+		for ( int i = 0; i < m_nCarveHoles; )
+		{
+			if ( gpGlobals->curtime >= m_CarveHoles[i].flBirth + m_CarveHoles[i].flLife )
+				m_CarveHoles[i] = m_CarveHoles[--m_nCarveHoles];
+			else
+				i++;
+		}
+
 		// Update all the moving traders and establish new ones.
 		int nTotal = m_xCount * m_yCount * m_zCount;
-		float flBulletStep = fTimeDelta / MAX( 0.2f, smoke_bullet_recover.GetFloat() );
-		float flBlastStep = fTimeDelta / MAX( 0.5f, smoke_he_recover.GetFloat() );
 		for(int i=0; i < nTotal; i++)
 		{
 			SmokeParticleInfo *pInfo = &m_SmokeParticleInfos[i];
 
 			if(!pInfo->m_pParticle)
 				continue;
-
-			// CS2-style refill: bullet holes close fast, HE clears linger.
-			if ( pInfo->m_BulletSuppress > 0.0f )
-				pInfo->m_BulletSuppress = MAX( 0.0f, pInfo->m_BulletSuppress - flBulletStep );
-			if ( pInfo->m_BlastSuppress > 0.0f )
-				pInfo->m_BlastSuppress = MAX( 0.0f, pInfo->m_BlastSuppress - flBlastStep );
 		
 			if(pInfo->m_TradeIndex == -1)
 			{
@@ -820,6 +836,75 @@ inline void C_ParticleSmokeGrenade::ApplyDynamicLight( const Vector &vParticlePo
 }
 
 
+// CS2-style carve, see docs/smoke-reactive.md. Every shot leaves a round hole
+// in the cloud. The hole is stored as a world-space centre + radius; at render
+// (and fog) time we test whether the sight line from the eye to a point falls
+// inside the cone that hole subtends from the camera. Puffs inside the cone get
+// cleared, so the hole goes through the whole cloud depth and always reads as a
+// circle you can see the map behind. The eye is the cone's apex, so the hole
+// looks right from any angle, and the per-hole pop/hold/refill curve deforms it.
+float C_ParticleSmokeGrenade::HoleSuppressAt( const Vector &vWorldPos )
+{
+	if ( m_nCarveHoles <= 0 )
+		return 0.0f;
+
+	CParticleMgr *pMgr = ParticleMgr();
+	if ( !pMgr )
+		return 0.0f;
+	const VMatrix &mv = pMgr->GetModelView();
+	Vector vP;
+	TransformParticle( mv, vWorldPos, vP );
+
+	float flNow = gpGlobals->curtime;
+	float flBest = 0.0f;
+
+	for ( int i = 0; i < m_nCarveHoles; i++ )
+	{
+		const SmokeHole_t &h = m_CarveHoles[i];
+
+		Vector vC;
+		TransformParticle( mv, h.vCenter, vC );
+		float flCLen = vC.Length();
+		if ( flCLen < 1.0f )
+			continue;
+
+		float flAge = flNow - h.flBirth;
+		float flLeft = h.flLife - flAge;
+		if ( flLeft <= 0.0f )
+			continue;
+
+		Vector vDir = vC / flCLen;
+		float flAlong = DotProduct( vP, vDir );
+		if ( flAlong <= 0.0f )
+			continue;			// behind the hole, not through it
+
+		Vector vPerp = vP - vDir * flAlong;
+		float flLateral = vPerp.Length();
+		float flHoleLat = ( h.flRadius / flCLen ) * flAlong;	// cone half-width here
+		// Cap the cone (~35 deg half-angle): standing right at the hole must
+		// not blank the whole screen.
+		flHoleLat = MIN( flHoleLat, flAlong * 0.7f );
+		float flEdge = flHoleLat * SMOKE_HOLE_FATTEN;
+		if ( flLateral >= flEdge )
+			continue;
+
+		// Hard core, short feather to the edge.
+		float flCore = flHoleLat * 0.8f;
+		float flS = ( flLateral <= flCore )
+			? 1.0f
+			: 1.0f - ( flLateral - flCore ) / MAX( 1.0f, flEdge - flCore );
+
+		// Open fast (~0.12s), hold, then refill over the tail of the life.
+		float flPop = clamp( flAge / 0.12f, 0.0f, 1.0f );
+		float flFade = clamp( flLeft / MAX( 0.01f, h.flLife * 0.6f ), 0.0f, 1.0f );
+
+		flBest = MAX( flBest, clamp( flS * h.flStrength * flPop * flFade, 0.0f, 1.0f ) );
+	}
+
+	return flBest;
+}
+
+
 void C_ParticleSmokeGrenade::RenderParticles( CParticleRenderIterator *pIterator )
 {
 	const SmokeGrenadeParticle *pParticle = (const SmokeGrenadeParticle*)pIterator->GetFirst();
@@ -827,6 +912,7 @@ void C_ParticleSmokeGrenade::RenderParticles( CParticleRenderIterator *pIterator
 	// Hoisted: ConVar reads don't belong in the per-puff loop.
 	float flCutoff = clamp( smoke_core.GetFloat(), 0.2f, 0.8f );
 	float flBright = smoke_brightness.GetFloat();
+	int nRaySuppressed = 0;
 
 	while ( pParticle )
 	{
@@ -893,8 +979,19 @@ void C_ParticleSmokeGrenade::RenderParticles( CParticleRenderIterator *pIterator
 			// Apply the precalculated fade alpha from world geometry.
 			alpha *= pParticle->m_FadeAlpha;
 
-			// CS2-style reactive smoke: carved holes thin the puff.
-			alpha *= ( 1.0f - pParticle->m_Suppress );
+			// CS2-style reactive carve: punch a round hole you can see through.
+			// HoleSuppressAt tests this puff against every live hole's view
+			// cone (see the function) and returns 1 inside the hard core, 0
+			// outside, so the hole clears the whole cloud depth as a circle.
+			if ( m_nCarveHoles > 0 )
+			{
+				float flHoleSuppress = HoleSuppressAt( vWorldSpacePos );
+				if ( flHoleSuppress > 0.0f )
+				{
+					alpha *= ( 1.0f - flHoleSuppress );
+					nRaySuppressed++;
+				}
+			}
 
 			// TODO: optimize this whole routine!
 			Vector color = (m_MinColor + (m_MaxColor - m_MinColor) * (pParticle->m_ColorInterp / 255.1f)) * flBright;
@@ -927,9 +1024,8 @@ void C_ParticleSmokeGrenade::RenderParticles( CParticleRenderIterator *pIterator
 
 			//debugoverlay->AddBoxOverlay( renderPos, Vector( -2, -2, -2), Vector( 2, 2, 2), vec3_angle, 255, 255, 255, 255, 1.0f );
 
-			// Skip only puffs a carve has fully erased, so unsuppressed
-			// cells always draw (no holes unless something carved one).
-			if ( pParticle->m_Suppress <= 0.0f || alpha > 0.001f )
+			// Draw if there is any alpha left; a carve hole can clear a puff.
+			if ( alpha > 0.001f )
 			{
 			// Puffs inflate as the cloud blooms and breathe outward as it
 			// dissipates, like a real volume exchanging with the air.
@@ -946,6 +1042,14 @@ void C_ParticleSmokeGrenade::RenderParticles( CParticleRenderIterator *pIterator
 		}
 
 		pParticle = (SmokeGrenadeParticle*)pIterator->GetNext( sortKey );
+	}
+
+	if ( smoke_debug.GetBool() && nRaySuppressed > 0 &&
+		 ( gpGlobals->curtime - m_flLastHoleDebug ) > 0.5f )
+	{
+		m_flLastHoleDebug = gpGlobals->curtime;
+		Msg( "smoke_debug: carve hole cleared %d puffs (%d live holes)\n",
+			 nRaySuppressed, m_nCarveHoles );
 	}
 }
 
@@ -1007,6 +1111,7 @@ void C_ParticleSmokeGrenade::FillVolume()
 	m_flFadeT = 0;
 	m_vecBaseLift.Init();
 	m_bVolumeFilled = true;
+	m_nCarveHoles = 0;
 
 	// Spawn all of our particles. Denser than stock (6x6x6 = 216 puffs) at
 	// roughly the same world size, so the cloud reads as one volume.
@@ -1103,8 +1208,6 @@ void C_ParticleSmokeGrenade::FillVolume()
 					pInfo->m_pParticle = NULL;
 					pInfo->m_bMolded = false;
 					pInfo->m_TradeIndex = -1;
-					pInfo->m_BulletSuppress = 0.0f;
-					pInfo->m_BlastSuppress = 0.0f;
 					pInfo->m_FadeAlpha = 1.0f;
 
 					// Low-end lever: checkerboard the grid (108 puffs).
@@ -1160,7 +1263,6 @@ void C_ParticleSmokeGrenade::FillVolume()
 							pParticle->m_ColorInterp = (unsigned char)((rand() * 255) / VALVE_RAND_MAX);
 							pParticle->m_RotationSpeed = FRand(-ROTATION_SPEED, ROTATION_SPEED); // Rotation speed.
 							pParticle->m_CurRotation = FRand(-6, 6);
-							pParticle->m_Suppress = 0.0f;
 							pParticle->m_flSize = SMOKEPARTICLE_SIZE * FRand( 0.85f, 1.15f );
 
 							//debugoverlay->AddBoxOverlay( vMolded, Vector( -2, -2, -2), Vector( 2, 2, 2), vec3_angle, 255, 0, 0, 255, 5.0f );
@@ -1348,6 +1450,33 @@ void C_ParticleSmokeGrenade::CleanupToolRecordingState( KeyValues *msg )
 // CS2-style reactive smoke (see docs/smoke-reactive.md). Client-only: carve
 // the local copy of every active smoke, no server or networking changes.
 //-----------------------------------------------------------------------------
+// Punch a round hole into the cloud. Holes are kept in a small ring; the one
+// closest to refilling is recycled when full.
+void C_ParticleSmokeGrenade::AddCarveHole( const Vector &vCenter, float flRadius, float flStrength, float flLife )
+{
+	int nSlot;
+	if ( m_nCarveHoles < MAX_CARVE_HOLES )
+	{
+		nSlot = m_nCarveHoles++;
+	}
+	else
+	{
+		nSlot = 0;
+		for ( int i = 1; i < MAX_CARVE_HOLES; i++ )
+			if ( ( m_CarveHoles[i].flBirth + m_CarveHoles[i].flLife ) <
+				 ( m_CarveHoles[nSlot].flBirth + m_CarveHoles[nSlot].flLife ) )
+				nSlot = i;
+	}
+
+	SmokeHole_t &h = m_CarveHoles[nSlot];
+	h.vCenter = vCenter;
+	h.flRadius = flRadius;
+	h.flStrength = MIN( 1.0f, flStrength );
+	h.flBirth = gpGlobals->curtime;
+	h.flLife = MAX( 0.05f, flLife );
+}
+
+
 void C_ParticleSmokeGrenade::ApplyBulletSegment( const Vector &vecStart, const Vector &vecEnd )
 {
 	if ( m_CurrentStage != 1 || !smoke_reactive_enable.GetBool() )
@@ -1363,31 +1492,23 @@ void C_ParticleSmokeGrenade::ApplyBulletSegment( const Vector &vecStart, const V
 	if ( ReactiveSmokeDistPointToSegment( m_SmokeBasePos, vecStart, vecEnd ) > flCloudRadius + flRadius )
 		return;
 
-	int nTotal = m_xCount * m_yCount * m_zCount;
-	int nCarved = 0;
-	float flMaxAdd = 0.0f;
-	for ( int i = 0; i < nTotal; i++ )
-	{
-		SmokeParticleInfo *pInfo = &m_SmokeParticleInfos[i];
-		if ( !pInfo->m_pParticle )
-			continue;
+	// Hole centre: the point on the bullet's path nearest the middle of the
+	// cloud, so the hole opens where the round crossed the smoke (its
+	// midpoint can be far outside on a long shot into a wall behind it).
+	Vector vCenter = ReactiveSmokeClosestPointOnSegment( m_SmokeBasePos, vecStart, vecEnd );
 
-		Vector vWorldPos = m_SmokeBasePos + pInfo->m_pParticle->m_Pos;
-		float flDist = ReactiveSmokeDistPointToSegment( vWorldPos, vecStart, vecEnd );
-		if ( flDist < flRadius )
-		{
-			float flFall = 1.0f - flDist / flRadius;
-			flFall *= flFall;
-			float flAdd = flStrength * flFall;
-			pInfo->m_BulletSuppress = MIN( 1.0f, pInfo->m_BulletSuppress + flAdd );
-			// Snap the visible copy so the hole punches this frame, not next.
-			pInfo->m_pParticle->m_Suppress = MAX( pInfo->m_BulletSuppress, pInfo->m_BlastSuppress );
-			nCarved++;
-			flMaxAdd = MAX( flMaxAdd, flAdd );
-		}
-	}
-	if ( smoke_debug.GetBool() && nCarved > 0 )
-		Msg( "smoke_debug: bullet carved %d cells (max +%.2f)\n", nCarved, flMaxAdd );
+	// Keep the centre inside the cloud so a grazing shot still drills in.
+	Vector vToCenter = vCenter - m_SmokeBasePos;
+	float flLen = vToCenter.Length();
+	float flMaxOff = MAX( 1.0f, m_SpacingRadius * 0.9f );
+	if ( flLen > flMaxOff )
+		vCenter = m_SmokeBasePos + vToCenter * ( flMaxOff / MAX( 1.0f, flLen ) );
+
+	AddCarveHole( vCenter, flRadius, flStrength, MAX( 0.2f, smoke_bullet_recover.GetFloat() ) );
+
+	if ( smoke_debug.GetBool() )
+		Msg( "smoke_debug: bullet hole (%.0f %.0f %.0f) r %.0f, %d live\n",
+			 vCenter.x, vCenter.y, vCenter.z, flRadius, m_nCarveHoles );
 }
 
 
@@ -1405,22 +1526,15 @@ void C_ParticleSmokeGrenade::ApplyExplosion( const Vector &vecCenter )
 	if ( ( m_SmokeBasePos - vecCenter ).Length() > flCloudRadius + flRadius )
 		return;
 
-	int nTotal = m_xCount * m_yCount * m_zCount;
-	for ( int i = 0; i < nTotal; i++ )
-	{
-		SmokeParticleInfo *pInfo = &m_SmokeParticleInfos[i];
-		if ( !pInfo->m_pParticle )
-			continue;
+	// HE clears a big round hole the same way a bullet clears a small one.
+	Vector vCenter = vecCenter;
+	Vector vToCenter = vCenter - m_SmokeBasePos;
+	float flLen = vToCenter.Length();
+	float flMaxOff = MAX( 1.0f, m_SpacingRadius * 0.9f );
+	if ( flLen > flMaxOff )
+		vCenter = m_SmokeBasePos + vToCenter * ( flMaxOff / MAX( 1.0f, flLen ) );
 
-		Vector vWorldPos = m_SmokeBasePos + pInfo->m_pParticle->m_Pos;
-		float flDist = ( vWorldPos - vecCenter ).Length();
-		if ( flDist < flRadius )
-		{
-			float flFall = 1.0f - flDist / flRadius;
-			pInfo->m_BlastSuppress = MIN( 1.0f, pInfo->m_BlastSuppress + flStrength * flFall );
-			pInfo->m_pParticle->m_Suppress = MAX( pInfo->m_BulletSuppress, pInfo->m_BlastSuppress );
-		}
-	}
+	AddCarveHole( vCenter, flRadius, flStrength, MAX( 0.5f, smoke_he_recover.GetFloat() ) );
 }
 
 
