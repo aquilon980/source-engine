@@ -24,9 +24,9 @@
 
 #define NUM_PARTICLES_PER_DIMENSION 6
 
-#define SMOKEPARTICLE_OVERLAP		30
+#define SMOKEPARTICLE_OVERLAP		44
 
-#define SMOKEPARTICLE_SIZE			80
+#define SMOKEPARTICLE_SIZE			46
 #define NUM_MATERIAL_HANDLES		2
 
 // Volumetric smoke (see docs/smoke-volumetric.md): the cloud is wider than
