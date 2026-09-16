@@ -47,7 +47,7 @@ int g_OffsetLookup[3] = {-1,0,1};
 // Client-only visuals — the server sim and bot radius are untouched.
 static ConVar smoke_reactive_enable( "smoke_reactive_enable", "1", FCVAR_ARCHIVE, "CS2-style smoke: bullets carve holes, HE blasts clear smoke that refills." );
 static ConVar smoke_bullet_radius( "smoke_bullet_radius", "60", FCVAR_ARCHIVE, "Radius around a bullet path that thins smoke.", true, 4.0f, true, 160.0f );
-static ConVar smoke_bullet_strength( "smoke_bullet_strength", "0.85", FCVAR_ARCHIVE, "How much smoke one bullet clears (0-1).", true, 0.0f, true, 1.0f );
+static ConVar smoke_bullet_strength( "smoke_bullet_strength", "1.0", FCVAR_ARCHIVE, "How much smoke one bullet clears (0-1).", true, 0.0f, true, 1.0f );
 static ConVar smoke_bullet_recover( "smoke_bullet_recover", "1.4", FCVAR_ARCHIVE, "Seconds for a bullet hole to refill.", true, 0.2f, true, 10.0f );
 static ConVar smoke_he_radius( "smoke_he_radius", "290", FCVAR_ARCHIVE, "Radius of the HE smoke clear.", true, 50.0f, true, 800.0f );
 static ConVar smoke_he_strength( "smoke_he_strength", "1.0", FCVAR_ARCHIVE, "How much smoke an HE blast clears (0-1).", true, 0.0f, true, 1.0f );
@@ -60,6 +60,7 @@ static ConVar smoke_mold_enable( "smoke_mold_enable", "1", FCVAR_ARCHIVE, "Smoke
 static ConVar smoke_bloom_time( "smoke_bloom_time", "1.4", FCVAR_ARCHIVE, "Seconds for the smoke cloud to bloom to full size.", true, 0.5f, true, 3.0f );
 static ConVar smoke_core( "smoke_core", "0.45", FCVAR_ARCHIVE, "Fraction of the cloud that stays fully dense (soft edge outside it).", true, 0.2f, true, 0.8f );
 static ConVar smoke_brightness( "smoke_brightness", "1.0", FCVAR_ARCHIVE, "Smoke puff brightness multiplier.", true, 0.4f, true, 1.6f );
+static ConVar smoke_debug( "smoke_debug", "0", 0, "Log smoke mold/carve diagnostics to the console (goes to console.log)." );
 
 // Same pattern as c_func_smokevolume/c_smokestack: low-end lever that halves
 // the cloud to a checkerboard when the user opts out of dense particles.
@@ -834,9 +835,13 @@ void C_ParticleSmokeGrenade::RenderParticles( CParticleRenderIterator *pIterator
 		float sortKey;
 
 		// Draw. Ellipsoidal metric so the squashed cloud feathers evenly
-		// on all axes instead of ending in a dense flat top.
+		// on all axes instead of ending in a dense flat top. The falloff
+		// is anchored below center (~55% of the half-height) so the dense
+		// core sits at head height over the dirt — a centered ball reads
+		// as hovering and leaves the ground wispy.
 		Vector vEll = pParticle->m_Pos;
 		vEll.z /= MAX( 0.3f, m_flHeightScale );
+		vEll.z += m_SpacingRadius * m_flHeightScale * 0.55f;
 		float len = vEll.Length();
 		if ( len > m_ExpandRadius )
 		{
@@ -899,6 +904,13 @@ void C_ParticleSmokeGrenade::RenderParticles( CParticleRenderIterator *pIterator
 
 			// Lighting.
 			ApplyDynamicLight( renderPos, color );
+
+			// Grey floor: CS2 smoke holds a faint ambient glow even in
+			// shadow — it reads as grey wool, never soot. Without this,
+			// shaded clouds collapse toward black.
+			color.x = MAX( color.x, 0.30f );
+			color.y = MAX( color.y, 0.30f );
+			color.z = MAX( color.z, 0.33f );
 
 			// Gentle unify toward luminance keeps the smoke reading as one
 			// grey volume while preserving a breath of the ambient hue —
@@ -1163,7 +1175,14 @@ void C_ParticleSmokeGrenade::FillVolume()
 							assert(testX == x && testY == y && testZ == z);
 						#endif
 
-						Vector vColor = EngineGetLightForPoint(vMolded);
+						// Sample lighting just above the dirt, never inside it:
+						// the sheet hangs slightly under the surface and a
+						// buried sample comes back black, painting the whole
+						// ground layer as soot instead of smoke.
+						Vector vLightPos = vMolded;
+						if ( bMold )
+							vLightPos.z = MAX( vLightPos.z, flColGround[x][y] + 4.0f );
+						Vector vColor = EngineGetLightForPoint(vLightPos);
 						pInfo->m_Color[0] = (unsigned char)(vColor.x * 255.9f);
 						pInfo->m_Color[1] = (unsigned char)(vColor.y * 255.9f);
 						pInfo->m_Color[2] = (unsigned char)(vColor.z * 255.9f);
@@ -1206,6 +1225,9 @@ void C_ParticleSmokeGrenade::FillVolume()
 			}
 		}
 	}
+
+	if ( smoke_debug.GetBool() )
+		Msg( "smoke_debug: fill lift %.0f mold %d\n", m_vecBaseLift.z, bMold ? 1 : 0 );
 }
 
 //-----------------------------------------------------------------------------
@@ -1342,6 +1364,8 @@ void C_ParticleSmokeGrenade::ApplyBulletSegment( const Vector &vecStart, const V
 		return;
 
 	int nTotal = m_xCount * m_yCount * m_zCount;
+	int nCarved = 0;
+	float flMaxAdd = 0.0f;
 	for ( int i = 0; i < nTotal; i++ )
 	{
 		SmokeParticleInfo *pInfo = &m_SmokeParticleInfos[i];
@@ -1354,11 +1378,16 @@ void C_ParticleSmokeGrenade::ApplyBulletSegment( const Vector &vecStart, const V
 		{
 			float flFall = 1.0f - flDist / flRadius;
 			flFall *= flFall;
-			pInfo->m_BulletSuppress = MIN( 1.0f, pInfo->m_BulletSuppress + flStrength * flFall );
+			float flAdd = flStrength * flFall;
+			pInfo->m_BulletSuppress = MIN( 1.0f, pInfo->m_BulletSuppress + flAdd );
 			// Snap the visible copy so the hole punches this frame, not next.
 			pInfo->m_pParticle->m_Suppress = MAX( pInfo->m_BulletSuppress, pInfo->m_BlastSuppress );
+			nCarved++;
+			flMaxAdd = MAX( flMaxAdd, flAdd );
 		}
 	}
+	if ( smoke_debug.GetBool() && nCarved > 0 )
+		Msg( "smoke_debug: bullet carved %d cells (max +%.2f)\n", nCarved, flMaxAdd );
 }
 
 
@@ -1443,7 +1472,9 @@ void ReactiveSmoke_OnBulletSegment( const Vector &vecStart, const Vector &vecEnd
 
 #if CSTRIKE_DLL
 	ReactiveSmoke_SegmentCtx_t ctx = { &vecStart, &vecEnd };
-	ReactiveSmoke_ForEachSmoke( ReactiveSmoke_ApplySegment, &ctx );
+	int nSmokes = ReactiveSmoke_ForEachSmoke( ReactiveSmoke_ApplySegment, &ctx );
+	if ( smoke_debug.GetBool() )
+		Msg( "smoke_debug: bullet segment, %d smokes tracked\n", nSmokes );
 #endif
 }
 
