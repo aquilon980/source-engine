@@ -46,12 +46,24 @@ int g_OffsetLookup[3] = {-1,0,1};
 // short-lived tunnels, HE blasts clear a sphere that refills in place.
 // Client-only visuals — the server sim and bot radius are untouched.
 static ConVar smoke_reactive_enable( "smoke_reactive_enable", "1", FCVAR_ARCHIVE, "CS2-style smoke: bullets carve holes, HE blasts clear smoke that refills." );
-static ConVar smoke_bullet_radius( "smoke_bullet_radius", "80", FCVAR_ARCHIVE, "Radius around a bullet path that thins smoke.", true, 4.0f, true, 160.0f );
+static ConVar smoke_bullet_radius( "smoke_bullet_radius", "60", FCVAR_ARCHIVE, "Radius around a bullet path that thins smoke.", true, 4.0f, true, 160.0f );
 static ConVar smoke_bullet_strength( "smoke_bullet_strength", "0.85", FCVAR_ARCHIVE, "How much smoke one bullet clears (0-1).", true, 0.0f, true, 1.0f );
 static ConVar smoke_bullet_recover( "smoke_bullet_recover", "1.4", FCVAR_ARCHIVE, "Seconds for a bullet hole to refill.", true, 0.2f, true, 10.0f );
 static ConVar smoke_he_radius( "smoke_he_radius", "290", FCVAR_ARCHIVE, "Radius of the HE smoke clear.", true, 50.0f, true, 800.0f );
 static ConVar smoke_he_strength( "smoke_he_strength", "1.0", FCVAR_ARCHIVE, "How much smoke an HE blast clears (0-1).", true, 0.0f, true, 1.0f );
 static ConVar smoke_he_recover( "smoke_he_recover", "3.0", FCVAR_ARCHIVE, "Seconds for HE-cleared smoke to refill.", true, 0.5f, true, 15.0f );
+
+// Volumetric CS2-style smoke (see docs/smoke-volumetric.md): the cloud molds
+// to the ground and walls, blooms fast with a soft overshoot, and dissolves
+// patchily instead of shrinking as a ball. Client-only visuals.
+static ConVar smoke_mold_enable( "smoke_mold_enable", "1", FCVAR_ARCHIVE, "Smoke molds to the ground/walls instead of clipping through them." );
+static ConVar smoke_bloom_time( "smoke_bloom_time", "1.4", FCVAR_ARCHIVE, "Seconds for the smoke cloud to bloom to full size.", true, 0.5f, true, 3.0f );
+static ConVar smoke_core( "smoke_core", "0.45", FCVAR_ARCHIVE, "Fraction of the cloud that stays fully dense (soft edge outside it).", true, 0.2f, true, 0.8f );
+static ConVar smoke_brightness( "smoke_brightness", "1.0", FCVAR_ARCHIVE, "Smoke puff brightness multiplier.", true, 0.4f, true, 1.6f );
+
+// Same pattern as c_func_smokevolume/c_smokestack: low-end lever that halves
+// the cloud to a checkerboard when the user opts out of dense particles.
+static ConVar mat_reduceparticles( "mat_reduceparticles", "0" );
 
 
 // ------------------------------------------------------------------------- //
@@ -75,6 +87,7 @@ private:
 		float				m_CurRotation;
 		float				m_FadeAlpha;		// Set as it moves around.
 		float				m_Suppress;			// CS2-style carve: 0 = full smoke, 1 = cleared.
+		float				m_flSize;			// Base puff size (bloom + fade scale it).
 		unsigned char		m_ColorInterp;		// Amount between min and max colors.
 		unsigned char		m_Color[4];
 	};
@@ -130,6 +143,8 @@ private:
 		float					m_FadeAlpha;		// Calculated from nearby world geometry.
 		float					m_BulletSuppress;	// CS2-style: bullet carve, refills fast.
 		float					m_BlastSuppress;	// CS2-style: HE clear, refills slow.
+		Vector					m_MoldPos;			// Molded local offset (wall-pulled, ground-clamped).
+		bool					m_bMolded;			// False for culled (inside-solid) cells.
 		unsigned char			m_Color[4];
 	};
 
@@ -159,10 +174,18 @@ private:
 
 	inline Vector				GetSmokeParticlePos(int x, int y, int z)	
 	{
+		// Molded cells keep their wall-pulled, ground-clamped offset so the
+		// churn trade animation shuffles puffs inside the fitted volume.
+		if ( m_bVolumeFilled )
+		{
+			SmokeParticleInfo *pMold = &m_SmokeParticleInfos[GetSmokeParticleIndex(x,y,z)];
+			if ( pMold->m_bMolded )
+				return m_SmokeBasePos + pMold->m_MoldPos;
+		}
 		return m_SmokeBasePos + 
 			Vector( ((float)x / (m_xCount-1)) * m_SpacingRadius * 2 - m_SpacingRadius,
 				((float)y / (m_yCount-1)) * m_SpacingRadius * 2 - m_SpacingRadius,
-				((float)z / (m_zCount-1)) * m_SpacingRadius * 2 - m_SpacingRadius);
+				((float)z / (m_zCount-1)) * m_SpacingRadius * m_flHeightScale * 2 - m_SpacingRadius * m_flHeightScale);
 	}
 
 	inline Vector				GetSmokeParticlePosIndex(int index)
@@ -225,6 +248,10 @@ private:
 
 	float				m_ExpandTimeCounter;	// How long since we started expanding.	
 	float				m_ExpandRadius;			// How large is our radius.
+	float				m_flHeightScale;		// Z squish of the cloud (volumetric: wider than tall).
+	float				m_flBloomEase;			// 0-1 cubic-out bloom progress (drives puff inflation).
+	float				m_flFadeT;				// 0-1 global fade progress (drives patchy dissolve).
+	Vector				m_vecBaseLift;			// Ground-snap lift applied to the base every frame.
 
 	C_SmokeTrail		m_SmokeTrail;
 };
@@ -333,12 +360,20 @@ C_ParticleSmokeGrenade::C_ParticleSmokeGrenade()
 {
 	memset(m_MaterialHandles, 0, sizeof(m_MaterialHandles));
 
-	m_MinColor.Init(0.5, 0.5, 0.5);
-	m_MaxColor.Init(0.6, 0.6, 0.6 );
+	// Volumetric look (see docs/smoke-volumetric.md): bright CS2-style grey
+	// with a faint cool lift. World lighting tints it per-puff at spawn.
+	m_MinColor.Init(0.80, 0.81, 0.84);
+	m_MaxColor.Init(0.90, 0.91, 0.94);
 
 	m_nActiveLights = 0;
 	m_ExpandRadius = 0;
 	m_ExpandTimeCounter = 0;
+	m_xCount = m_yCount = m_zCount = 0;
+	m_SpacingRadius = 0;
+	m_flHeightScale = SMOKE_CLOUD_HEIGHT_SCALE;
+	m_flBloomEase = 0;
+	m_flFadeT = 0;
+	m_vecBaseLift.Init();
 	m_FadeStartTime = 0;
 	m_FadeEndTime = 0;
 	m_flSpawnTime = 0;
@@ -389,12 +424,14 @@ void C_ParticleSmokeGrenade::Start(CParticleMgr *pParticleMgr, IPrototypeArgAcce
 
 	m_SmokeTrail.SetLocalOrigin( GetAbsOrigin() );
 
-	for(int i=0; i < NUM_MATERIAL_HANDLES; i++)
-	{
-		char str[256];
-		Q_snprintf(str, sizeof( str ), "particle/particle_smokegrenade%d", i+1);
-		m_MaterialHandles[i] = m_ParticleEffect.FindOrAddMaterial(str);
-	}
+	// Stock soft-smoke cards (UnlitGeneric) — the only thing the old quad
+	// emitter can feed correctly. SpriteCard materials need TEXCOORD1-4
+	// (radius/rotation/corner IDs) that RenderParticle_ColorSizeAngle never
+	// writes, so they collapse to degenerate quads here. Wall/floor blending
+	// comes from the CPU-side mold + edge fade below, not the material.
+	// Two densities for a little texture variety across the cloud.
+	m_MaterialHandles[0] = m_ParticleEffect.FindOrAddMaterial("particle/particle_smokegrenade1");
+	m_MaterialHandles[1] = m_ParticleEffect.FindOrAddMaterial("particle/particle_smokegrenade");
 
 	if( m_CurrentStage == 2 )
 	{
@@ -442,6 +479,7 @@ void C_ParticleSmokeGrenade::ClientThink()
 			// CS2-style: carved/cleared smoke fogs the screen less. Average the
 			// per-cell clear amounts so the overlay tracks the visible puffs.
 			float flSuppressSum = 0.0f;
+			float flMaxSuppress = 0.0f;
 			int nSuppressCount = 0;
 			int nTotalFog = m_xCount * m_yCount * m_zCount;
 			for ( int iFog = 0; iFog < nTotalFog; iFog++ )
@@ -449,12 +487,25 @@ void C_ParticleSmokeGrenade::ClientThink()
 				SmokeParticleInfo *pFogInfo = &m_SmokeParticleInfos[iFog];
 				if ( !pFogInfo->m_pParticle )
 					continue;
-				flSuppressSum += MAX( pFogInfo->m_BulletSuppress, pFogInfo->m_BlastSuppress );
+				float flCellSuppress = MAX( pFogInfo->m_BulletSuppress, pFogInfo->m_BlastSuppress );
+				flSuppressSum += flCellSuppress;
+				flMaxSuppress = MAX( flMaxSuppress, flCellSuppress );
 				nSuppressCount++;
 			}
-			float flFogAlpha = m_FadeAlpha;
+			// Median-patch fade: the overlay follows what a mid-dissolve
+			// patch shows, not the unstaggered global — otherwise the
+			// insider stays fogged while staring through a clear hole.
+			float flMedT = clamp( m_flFadeT * 1.35f - 0.175f, 0.0f, 1.0f );
+			float flFogAlpha = 1.0f - flMedT * flMedT * ( 3.0f - 2.0f * flMedT );
+			if ( m_SpacingRadius > 0.0f )
+				flFogAlpha *= m_ExpandRadius / (m_SpacingRadius*2);
 			if ( nSuppressCount > 0 )
+			{
 				flFogAlpha *= 1.0f - ( flSuppressSum / (float)nSuppressCount );
+				// Two-way carve: the clearest hole clears the insider's
+				// fog too, so a tunnel works both ways like CS2.
+				flFogAlpha *= 1.0f - 0.5f * flMaxSuppress;
+			}
 
 			if( testDist < flCoreDistance )
 			{
@@ -588,6 +639,16 @@ void C_ParticleSmokeGrenade::UpdateParticleAndFindTrade( int iParticle, float fT
 					SmokeParticleInfo *pOther = GetSmokeParticleInfo(testX, testY, testZ);
 					if(pOther->m_pParticle && pOther->m_TradeIndex == -1)
 					{
+						// The straight trade path must not saw through a
+						// wall — otherwise churn visibly clips cards through
+						// doorframes around corners. Blocked? Keep looking.
+						Vector vMine = m_SmokeBasePos + pInfo->m_pParticle->m_Pos;
+						Vector vTheirs = m_SmokeBasePos + pOther->m_pParticle->m_Pos;
+						trace_t trTrade;
+						WorldTraceLine( vMine, vTheirs, MASK_SOLID_BRUSHONLY, &trTrade );
+						if ( trTrade.fraction < 1.0f && !trTrade.startsolid )
+							continue;
+
 						// Ok, this one is looking to trade also.
 						pInfo->m_TradeIndex = GetSmokeParticleIndex(testX, testY, testZ);
 						pOther->m_TradeIndex = iParticle;
@@ -610,24 +671,50 @@ void C_ParticleSmokeGrenade::Update(float fTimeDelta)
 
 	// Update the smoke trail.
 	UpdateSmokeTrail( fTimeDelta );
-	
-	// Update our fade alpha.
+
+	if(m_CurrentStage == 1)
+	{
+		// Bloom: fast cubic-out fill with a faint pressure overshoot, then
+		// settle — the CS2 "whoomph" instead of the old slow sine swell.
+		float flBloomTime = MAX( 0.5f, smoke_bloom_time.GetFloat() );
+		m_ExpandTimeCounter = flLifetime;
+		if(m_ExpandTimeCounter > flBloomTime)
+			m_ExpandTimeCounter = flBloomTime;
+
+		float flT = clamp( m_ExpandTimeCounter / flBloomTime, 0.0f, 1.0f );
+		m_flBloomEase = 1.0f - (1.0f - flT) * (1.0f - flT) * (1.0f - flT);
+		float flOvershoot = 1.0f + 0.06f * sin( M_PI * m_flBloomEase ) * ( 1.0f - m_flBloomEase );
+
+		m_ExpandRadius = (m_SpacingRadius*2) * m_flBloomEase * flOvershoot;
+
+//		debugoverlay->AddBoxOverlay( GetPos(), Vector( -m_ExpandRadius, -m_ExpandRadius, -m_ExpandRadius), Vector( m_ExpandRadius, m_ExpandRadius, m_ExpandRadius), vec3_angle, 0, 255, 0, 1, 1.0f );
+	}
+
+	// Update our fade alpha. Smoothstep hold-then-dissolve: dense until the
+	// fade window opens, then a steady thin-out. Per-puff stagger (in
+	// RenderParticles) breaks the cloud up patchily on top of this.
 	if(flLifetime < m_FadeStartTime)
 	{
+		m_flFadeT = 0.0f;
 		m_FadeAlpha = 1;
 	}
 	else if(flLifetime < m_FadeEndTime)
 	{
-		float fadePercent = (flLifetime - m_FadeStartTime) / (m_FadeEndTime - m_FadeStartTime);
-		m_FadeAlpha = cos(fadePercent * 3.14159) * 0.5 + 0.5;
+		float flFadeSpan = MAX( 0.001f, m_FadeEndTime - m_FadeStartTime );
+		m_flFadeT = (flLifetime - m_FadeStartTime) / flFadeSpan;
+		float flS = m_flFadeT * m_flFadeT * (3.0f - 2.0f * m_flFadeT);
+		m_FadeAlpha = 1.0f - flS;
 	}
 	else
 	{
+		m_flFadeT = 1.0f;
 		m_FadeAlpha = 0;
 	}
 
-	// Scale by the amount the sphere has grown.
-	m_FadeAlpha *= m_ExpandRadius / (m_SpacingRadius*2);
+	// Scale by the amount the sphere has grown, so the cloud blooms in
+	// instead of popping to full density on the first frame.
+	if ( m_SpacingRadius > 0.0f )
+		m_FadeAlpha *= m_ExpandRadius / (m_SpacingRadius*2);
 
 	
 	// Update our bbox.
@@ -643,16 +730,6 @@ void C_ParticleSmokeGrenade::Update(float fTimeDelta)
 
 	if(m_CurrentStage == 1)
 	{
-		// Update the expanding sphere.
-		m_ExpandTimeCounter = flLifetime;
-		if(m_ExpandTimeCounter > SMOKESPHERE_EXPAND_TIME)
-			m_ExpandTimeCounter = SMOKESPHERE_EXPAND_TIME;
-
-		m_ExpandRadius = (m_SpacingRadius*2) * (float)sin(m_ExpandTimeCounter * M_PI * 0.5 / SMOKESPHERE_EXPAND_TIME);
-
-//		debugoverlay->AddBoxOverlay( GetPos(), Vector( -m_ExpandRadius, -m_ExpandRadius, -m_ExpandRadius), Vector( m_ExpandRadius, m_ExpandRadius, m_ExpandRadius), vec3_angle, 0, 255, 0, 1, 1.0f );
-
-
 		// Update all the moving traders and establish new ones.
 		int nTotal = m_xCount * m_yCount * m_zCount;
 		float flBulletStep = fTimeDelta / MAX( 0.2f, smoke_bullet_recover.GetFloat() );
@@ -681,7 +758,7 @@ void C_ParticleSmokeGrenade::Update(float fTimeDelta)
 		}
 	}
 
-	m_SmokeBasePos = GetPos();
+	m_SmokeBasePos = GetPos() + m_vecBaseLift;
 }
 
 
@@ -745,14 +822,22 @@ inline void C_ParticleSmokeGrenade::ApplyDynamicLight( const Vector &vParticlePo
 void C_ParticleSmokeGrenade::RenderParticles( CParticleRenderIterator *pIterator )
 {
 	const SmokeGrenadeParticle *pParticle = (const SmokeGrenadeParticle*)pIterator->GetFirst();
+
+	// Hoisted: ConVar reads don't belong in the per-puff loop.
+	float flCutoff = clamp( smoke_core.GetFloat(), 0.2f, 0.8f );
+	float flBright = smoke_brightness.GetFloat();
+
 	while ( pParticle )
 	{
 		Vector vWorldSpacePos = m_SmokeBasePos + pParticle->m_Pos;
 
 		float sortKey;
 
-		// Draw.
-		float len = pParticle->m_Pos.Length();
+		// Draw. Ellipsoidal metric so the squashed cloud feathers evenly
+		// on all axes instead of ending in a dense flat top.
+		Vector vEll = pParticle->m_Pos;
+		vEll.z /= MAX( 0.3f, m_flHeightScale );
+		float len = vEll.Length();
 		if ( len > m_ExpandRadius )
 		{
 			Vector vTemp;
@@ -776,20 +861,29 @@ void C_ParticleSmokeGrenade::RenderParticles( CParticleRenderIterator *pIterator
 			// Figure out the alpha based on where it is in the sphere.
 			float alpha = 1 - len / m_ExpandRadius;
 			
-			// This changes the ramp to be very solid in the core, then taper off.
-			static float testCutoff=0.3;
-			if(alpha > testCutoff)
+			// Dense volumetric core that feathers out softly. The core
+			// fraction is tunable live (smoke_core).
+			if(alpha > flCutoff)
 			{
 				alpha = 1;
 			}
 			else
 			{
-				// at testCutoff it's 1, at 0, it's 0
-				alpha = alpha / testCutoff;
+				// at flCutoff it's 1, at 0, it's 0 — smoothstepped so the
+				// silhouette melts instead of banding.
+				alpha = alpha / flCutoff;
+				alpha = alpha * alpha * (3.0f - 2.0f * alpha);
 			}
 
 			// Fade out globally.
 			alpha *= m_FadeAlpha;
+
+			// Patchy dissolve: each puff leads or lags the global fade by
+			// up to ~35% of the window (seeded by its color variation), so
+			// the cloud breaks apart instead of shrinking as a ball.
+			float flSeed = pParticle->m_ColorInterp / 255.0f;
+			float flLocalT = clamp( m_flFadeT * 1.35f - flSeed * 0.35f, 0.0f, 1.0f );
+			alpha *= 1.0f - flLocalT * flLocalT * (3.0f - 2.0f * flLocalT);
 
 			// Apply the precalculated fade alpha from world geometry.
 			alpha *= pParticle->m_FadeAlpha;
@@ -798,7 +892,7 @@ void C_ParticleSmokeGrenade::RenderParticles( CParticleRenderIterator *pIterator
 			alpha *= ( 1.0f - pParticle->m_Suppress );
 
 			// TODO: optimize this whole routine!
-			Vector color = m_MinColor + (m_MaxColor - m_MinColor) * (pParticle->m_ColorInterp / 255.1f);
+			Vector color = (m_MinColor + (m_MaxColor - m_MinColor) * (pParticle->m_ColorInterp / 255.1f)) * flBright;
 			color.x *= pParticle->m_Color[0] / 255.0f;
 			color.y *= pParticle->m_Color[1] / 255.0f;
 			color.z *= pParticle->m_Color[2] / 255.0f;
@@ -806,7 +900,14 @@ void C_ParticleSmokeGrenade::RenderParticles( CParticleRenderIterator *pIterator
 			// Lighting.
 			ApplyDynamicLight( renderPos, color );
 
-			color = (color + Vector( 0.5, 0.5, 0.5 )) / 2;   //Desaturate
+			// Gentle unify toward luminance keeps the smoke reading as one
+			// grey volume while preserving a breath of the ambient hue —
+			// the old (color + grey)/2 wash just dragged everything to mud.
+			float flLum = color.x * 0.3f + color.y * 0.59f + color.z * 0.11f;
+			color += (Vector( flLum, flLum, flLum ) - color) * 0.35f;
+			color.x = clamp( color.x, 0.0f, 1.0f );
+			color.y = clamp( color.y, 0.0f, 1.0f );
+			color.z = clamp( color.z, 0.0f, 1.0f );
 			
 			Vector tRenderPos;
 			TransformParticle(ParticleMgr()->GetModelView(), renderPos, tRenderPos);
@@ -814,16 +915,19 @@ void C_ParticleSmokeGrenade::RenderParticles( CParticleRenderIterator *pIterator
 
 			//debugoverlay->AddBoxOverlay( renderPos, Vector( -2, -2, -2), Vector( 2, 2, 2), vec3_angle, 255, 255, 255, 255, 1.0f );
 
-			// Skip only puffs the carve has actually erased, so
-			// smoke_reactive_enable 0 stays pixel-identical to stock.
+			// Skip only puffs a carve has fully erased, so unsuppressed
+			// cells always draw (no holes unless something carved one).
 			if ( pParticle->m_Suppress <= 0.0f || alpha > 0.001f )
 			{
+			// Puffs inflate as the cloud blooms and breathe outward as it
+			// dissipates, like a real volume exchanging with the air.
+			float flSize = pParticle->m_flSize * (0.55f + 0.45f * m_flBloomEase) * (1.0f + 0.25f * m_flFadeT);
 			RenderParticle_ColorSizeAngle(
 				pIterator->GetParticleDraw(),
 				tRenderPos,
 				color,
 				alpha,
-				SMOKEPARTICLE_SIZE,
+				flSize,
 				pParticle->m_CurRotation
 				);
 			}
@@ -887,13 +991,83 @@ void C_ParticleSmokeGrenade::FillVolume()
 	m_SmokeBasePos = GetPos();
 	m_SmokeTrail.SetEmit(false);
 	m_ExpandTimeCounter = m_ExpandRadius = 0;
+	m_flBloomEase = 0;
+	m_flFadeT = 0;
+	m_vecBaseLift.Init();
 	m_bVolumeFilled = true;
 
-	// Spawn all of our particles.
+	// Spawn all of our particles. Denser than stock (6x6x6 = 216 puffs) at
+	// roughly the same world size, so the cloud reads as one volume.
 	float overlap = SMOKEPARTICLE_OVERLAP;
 
 	m_SpacingRadius = (SMOKEGRENADE_PARTICLERADIUS - overlap) * NUM_PARTICLES_PER_DIMENSION * 0.5f;
 	m_xCount = m_yCount = m_zCount = NUM_PARTICLES_PER_DIMENSION;
+	m_flHeightScale = smoke_mold_enable.GetBool() ? SMOKE_CLOUD_HEIGHT_SCALE : 1.0f;
+
+	bool bMold = smoke_mold_enable.GetBool();
+	float flHz = m_SpacingRadius * m_flHeightScale;
+
+	// CS2-style molding: snap the cloud onto the ground and squash it under
+	// low ceilings, so smoke hugs floors and fills rooms instead of burying
+	// a third of its puffs underground or poking through the floor above.
+	float flGroundZ = m_SmokeBasePos.z;
+	bool bHaveGround = false;
+	if ( bMold )
+	{
+		trace_t trGround;
+		WorldTraceLine( m_SmokeBasePos + Vector( 0, 0, 32 ), m_SmokeBasePos - Vector( 0, 0, 220 ), MASK_SOLID_BRUSHONLY, &trGround );
+		if ( trGround.fraction < 1.0f && !trGround.startsolid )
+		{
+			flGroundZ = trGround.endpos.z;
+			bHaveGround = true;
+		}
+
+		trace_t trCeil;
+		WorldTraceLine( m_SmokeBasePos, m_SmokeBasePos + Vector( 0, 0, 340 ), MASK_SOLID_BRUSHONLY, &trCeil );
+		if ( bHaveGround && trCeil.fraction < 1.0f && !trCeil.startsolid )
+		{
+			float flAvail = trCeil.endpos.z - flGroundZ;
+			float flHzFit = MAX( 30.0f, ( flAvail - 24.0f ) * 0.5f );
+			if ( flHzFit < flHz )
+			{
+				m_flHeightScale = flHzFit / m_SpacingRadius;
+				flHz = flHzFit;
+			}
+		}
+
+		if ( bHaveGround )
+		{
+			// Bottom row rests just above the dirt; Update() re-applies
+			// this lift every frame via m_SmokeBasePos.
+			m_vecBaseLift.Init( 0, 0, ( flGroundZ + flHz + 10.0f ) - m_SmokeBasePos.z );
+			m_SmokeBasePos += m_vecBaseLift;
+		}
+	}
+
+	// Per-column ground heights so the sheet rides slopes, stairs and crate
+	// tops instead of clipping through them.
+	float flColGround[NUM_PARTICLES_PER_DIMENSION][NUM_PARTICLES_PER_DIMENSION];
+	for ( int gx = 0; gx < NUM_PARTICLES_PER_DIMENSION; gx++ )
+	{
+		for ( int gy = 0; gy < NUM_PARTICLES_PER_DIMENSION; gy++ )
+		{
+			flColGround[gx][gy] = m_SmokeBasePos.z - flHz - 160.0f;
+			if ( !bMold )
+				continue;
+
+			// Start at the cloud top, which the ceiling squash guarantees
+			// is inside the room — any higher and the probe begins inside
+			// the floor above and collapses the whole column to it.
+			Vector vColTop(
+				m_SmokeBasePos.x + ((float)gx / (NUM_PARTICLES_PER_DIMENSION-1)) * m_SpacingRadius * 2 - m_SpacingRadius,
+				m_SmokeBasePos.y + ((float)gy / (NUM_PARTICLES_PER_DIMENSION-1)) * m_SpacingRadius * 2 - m_SpacingRadius,
+				m_SmokeBasePos.z + flHz );
+			trace_t trCol;
+			WorldTraceLine( vColTop, vColTop - Vector( 0, 0, flHz + 220.0f ), MASK_SOLID_BRUSHONLY, &trCol );
+			if ( trCol.fraction < 1.0f && !trCol.startsolid )
+				flColGround[gx][gy] = trCol.endpos.z;
+		}
+	}
 
 	float invNumPerDimX = 1.0f / (m_xCount-1);
 	float invNumPerDimY = 1.0f / (m_yCount-1);
@@ -910,41 +1084,74 @@ void C_ParticleSmokeGrenade::FillVolume()
 							  
 			for(int z=0; z < m_zCount; z++)
 			{
-				vPos.z = m_SmokeBasePos.z + ((float)z * invNumPerDimZ) * m_SpacingRadius * 2 - m_SpacingRadius;
-
-				// Don't spawn and simulate particles that are inside a wall
-//				int contents = enginetrace->GetPointContents( vPos );
-
-				// Culling out particles in solid makes smoke not fill up small passageways.
-				//if( contents & CONTENTS_SOLID )
-				//{
-				//	continue;
-				//}
+				vPos.z = m_SmokeBasePos.z + ((float)z * invNumPerDimZ) * m_SpacingRadius * m_flHeightScale * 2 - m_SpacingRadius * m_flHeightScale;
 
 				if(SmokeParticleInfo *pInfo = GetSmokeParticleInfo(x,y,z))
 				{
-					// MD 11/10/03: disabled this because we weren't getting coverage near the ground.
-					// If we want it back in certain cases, we can make it a flag.
-					/*int contents = GetWorldPointContents(vPos);
-					if(false && (contents & CONTENTS_SOLID))
+					pInfo->m_pParticle = NULL;
+					pInfo->m_bMolded = false;
+					pInfo->m_TradeIndex = -1;
+					pInfo->m_BulletSuppress = 0.0f;
+					pInfo->m_BlastSuppress = 0.0f;
+					pInfo->m_FadeAlpha = 1.0f;
+
+					// Low-end lever: checkerboard the grid (108 puffs).
+					// After init so skipped cells stay clean NULLs.
+					if ( mat_reduceparticles.GetBool() && ( ( x + y + z ) & 1 ) )
+						continue;
+
+					Vector vMolded = vPos;
+
+					if ( bMold )
 					{
-						pInfo->m_pParticle = NULL;
+						// Inside a wall? Slide back to a fixed kiss inset off
+						// the surface, so smoke hugs cover at any distance
+						// instead of retreating a fraction of the ray (which
+						// left a visible gap on far walls). Still stuck
+						// (fully buried cells) means no puff at all.
+						// Brush-only: players and props move, the mold must
+						// not keep their shape after they leave.
+						if ( GetWorldPointContents( vMolded ) & CONTENTS_SOLID )
+						{
+							trace_t trPull;
+							WorldTraceLine( m_SmokeBasePos, vMolded, MASK_SOLID_BRUSHONLY, &trPull );
+							if ( trPull.fraction < 1.0f && !trPull.startsolid )
+							{
+								Vector vDir = vMolded - m_SmokeBasePos;
+								float flLen = vDir.Length();
+								if ( flLen > 1.0f )
+									vDir /= flLen;
+								else
+									vDir.Init( 0, 0, 1 );
+								vMolded = trPull.endpos - vDir * 12.0f;
+							}
+							if ( GetWorldPointContents( vMolded ) & CONTENTS_SOLID )
+								continue;
+						}
+
+						// Ride the terrain: hang the sheet slightly below
+						// its column's ground so the bottom row kisses the
+						// dirt (and low cover pockets stay filled) instead
+						// of floating a sprite above it.
+						float flMinZ = flColGround[x][y] - 12.0f;
+						if ( vMolded.z < flMinZ )
+							vMolded.z = flMinZ;
 					}
-					else
-					*/
+
 					{
 						SmokeGrenadeParticle *pParticle = 
 							(SmokeGrenadeParticle*)m_ParticleEffect.AddParticle(sizeof(SmokeGrenadeParticle), m_MaterialHandles[rand() % NUM_MATERIAL_HANDLES]);
 
 						if(pParticle)
 						{
-							pParticle->m_Pos = vPos - m_SmokeBasePos; // store its position in local space
+							pParticle->m_Pos = vMolded - m_SmokeBasePos; // store its position in local space
 							pParticle->m_ColorInterp = (unsigned char)((rand() * 255) / VALVE_RAND_MAX);
 							pParticle->m_RotationSpeed = FRand(-ROTATION_SPEED, ROTATION_SPEED); // Rotation speed.
 							pParticle->m_CurRotation = FRand(-6, 6);
 							pParticle->m_Suppress = 0.0f;
+							pParticle->m_flSize = SMOKEPARTICLE_SIZE * FRand( 0.85f, 1.15f );
 
-							//debugoverlay->AddBoxOverlay( vPos, Vector( -2, -2, -2), Vector( 2, 2, 2), vec3_angle, 255, 0, 0, 255, 5.0f );
+							//debugoverlay->AddBoxOverlay( vMolded, Vector( -2, -2, -2), Vector( 2, 2, 2), vec3_angle, 255, 0, 0, 255, 5.0f );
 						}
 
 						
@@ -956,36 +1163,42 @@ void C_ParticleSmokeGrenade::FillVolume()
 							assert(testX == x && testY == y && testZ == z);
 						#endif
 
-						Vector vColor = EngineGetLightForPoint(vPos);
+						Vector vColor = EngineGetLightForPoint(vMolded);
 						pInfo->m_Color[0] = (unsigned char)(vColor.x * 255.9f);
 						pInfo->m_Color[1] = (unsigned char)(vColor.y * 255.9f);
 						pInfo->m_Color[2] = (unsigned char)(vColor.z * 255.9f);
 
-						// Cast some rays and if it's too close to anything, fade its alpha down.
+						// Soften puffs kissing geometry: short axial probes
+						// fade cells whose centers sit almost inside a
+						// surface, so cards don't visibly slice through
+						// doorframes and crates at grazing angles.
 						pInfo->m_FadeAlpha = 1;
-						pInfo->m_BulletSuppress = 0.0f;
-						pInfo->m_BlastSuppress = 0.0f;
-
-						/*for(int i=0; i < NUM_FADE_PLANES; i++)
+						if ( bMold )
 						{
-							trace_t trace;
-							WorldTraceLine(vPos, vPos + s_FadePlaneDirections[i] * 100, MASK_SOLID_BRUSHONLY, &trace);
-							if(trace.fraction < 1.0f)
+							for(int i=0; i < (int)NUM_FADE_PLANES; i++)
 							{
-								float dist = DotProduct(trace.plane.normal, vPos) - trace.plane.dist;
-								if(dist < 0)
+								trace_t trace;
+								WorldTraceLine(vMolded, vMolded + s_FadePlaneDirections[i] * 32, MASK_SOLID_BRUSHONLY, &trace);
+								if(trace.fraction < 1.0f)
 								{
-									pInfo->m_FadeAlpha = 0;
-								}
-								else if(dist < SMOKEPARTICLE_SIZE)
-								{
-									float alphaScale = dist / SMOKEPARTICLE_SIZE;
-									alphaScale *= alphaScale * alphaScale;
-									pInfo->m_FadeAlpha *= alphaScale;
+									float flDist = trace.fraction * 32.0f;
+									if(flDist < 1.0f)
+									{
+										pInfo->m_FadeAlpha = 0;
+										break;
+									}
+									else if(flDist < 24.0f)
+									{
+										float flEdge = flDist / 24.0f;
+										flEdge = flEdge * flEdge * (3.0f - 2.0f * flEdge);
+										pInfo->m_FadeAlpha *= flEdge;
+									}
 								}
 							}
-						}*/
+						}
 
+						pInfo->m_MoldPos = vMolded - m_SmokeBasePos;
+						pInfo->m_bMolded = true;
 						pInfo->m_pParticle = pParticle;
 						pInfo->m_TradeIndex = -1;
 					}

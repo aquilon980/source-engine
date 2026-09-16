@@ -58,8 +58,8 @@ void DrawSmokeFogOverlay()
 
 	tmZone( TELEMETRY_LEVEL0, TMZF_NONE, "%s", __FUNCTION__ );
 
-	// Hard-coded for now..
-	g_SmokeFogOverlayColor.Init( 0.3, 0.3, 0.3 );
+	// Milky CS2-style in-smoke fog to match the brighter volumetric puffs.
+	g_SmokeFogOverlayColor.Init( 0.72, 0.72, 0.75 );
 	
 	CMatRenderContextPtr pRenderContext( materials );
 

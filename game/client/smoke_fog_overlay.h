@@ -22,11 +22,16 @@
 
 #define SMOKESPHERE_EXPAND_TIME		1		// Take N seconds to expand to SMOKESPHERE_MAX_RADIUS.
 
-#define NUM_PARTICLES_PER_DIMENSION 4
-#define SMOKEPARTICLE_OVERLAP		20
+#define NUM_PARTICLES_PER_DIMENSION 6
+
+#define SMOKEPARTICLE_OVERLAP		30
 
 #define SMOKEPARTICLE_SIZE			80
-#define NUM_MATERIAL_HANDLES		1
+#define NUM_MATERIAL_HANDLES		2
+
+// Volumetric smoke (see docs/smoke-volumetric.md): the cloud is wider than
+// it is tall and sits on the ground, CS2-style, instead of a floating cube.
+#define SMOKE_CLOUD_HEIGHT_SCALE	0.72
 
 
 void InitSmokeFogOverlay();
