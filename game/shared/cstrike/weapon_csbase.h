@@ -95,6 +95,7 @@ struct BobState_t
 		m_flLastStepTimer = -1.0f;
 		m_flStepPhase = 0.0f;
 		m_flStepBlend = 0.0f;
+		m_flLockError = 0.0f;
 		m_nStepParity = 0;
 	}
 
@@ -107,12 +108,14 @@ struct BobState_t
 	float m_flRawLateralBob;
 	// Footfall sync: latched step interval (seconds), last observed step
 	// timer (ms, -1 = unseen), free-running render phase (radians), blend
-	// 0 = free-run → 1 = step-locked, and stride parity (alternates the
-	// lateral extreme each footfall).
+	// 0 = free-run → 1 = step-locked, pending glide-into-lock error
+	// (radians), and stride parity (alternates the lateral extreme each
+	// footfall).
 	float m_flStepInterval;
 	float m_flLastStepTimer;
 	float m_flStepPhase;
 	float m_flStepBlend;
+	float m_flLockError;
 	int m_nStepParity;
 };
 

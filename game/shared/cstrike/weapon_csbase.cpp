@@ -1709,27 +1709,44 @@ bool CWeaponCSBase::IsUseable()
 
 		float flmaxSpeedDelta = MAX( 0, (gpGlobals->curtime - pBobState->m_flLastBobTime) * 640.0f );
 
-		// Footfall sync (cl_bob_sync): derive the bob phase from the player's
-		// step timer (ms until the next footstep) instead of free-running
-		// m_flBobTime. The timer counts interval -> 0, fires the step, and
-		// resets, so one derived cycle is exactly one stride at ANY rate
-		// (300ms running, 400 walking, ladder, water, ducked) with no drift.
-		// Airborne/idle the timer sits at 0, so the phase free-runs at the
-		// last stride rate instead of freezing mid-pose; a short blend eases
-		// back to the exact lock on the next footfall, so it never pops.
-		float flDt = MAX( 0.0f, gpGlobals->curtime - pBobState->m_flLastBobTime );
+		// Footfall sync (cl_bob_sync): the player's step timer
+		// (m_flStepSoundTime) is a NETWORKED value - it advances only at the
+		// command/tick rate and is sampled at the client's snapshot rate. Using
+		// it as the phase directly makes the gun tick at that rate and jump
+		// whenever the network corrects it. Use it ONLY to detect each footfall
+		// and latch the stride, and integrate the visible phase locally every
+		// render frame - so the bob is always smooth and still lands exactly on
+		// the footfall. Airborne/idle the timer sits at 0, so the phase
+		// free-runs at the last stride rate and the next footfall re-locks it
+		// with a short glide, so it neither freezes nor pops.
+		float flRawDt = gpGlobals->curtime - pBobState->m_flLastBobTime;
+		float flDt = clamp( flRawDt, 0.0f, 0.1f );
 		float flStepTimer = player->GetStepSoundTime();
-		if ( pBobState->m_flLastStepTimer >= 0.0f && flStepTimer > pBobState->m_flLastStepTimer + 1.0f )
+
+		// Fresh weapon or a stall: the old timer and phase aren't trustworthy.
+		if ( flRawDt > 0.25f )
 		{
-			// The timer jumped upward: a footfall just fired. Latch its
-			// interval and alternate the lateral extreme.
+			pBobState->m_flLastStepTimer = -1.0f;
+			pBobState->m_flLockError = 0.0f;
+		}
+
+		// A footfall is the timer running down to ~0 and snapping back up to
+		// roughly its interval. Demand a real jump from near zero, so network
+		// jitter (or a stale value) can't fake one and flip the lateral sway.
+		bool bFootfall = ( pBobState->m_flLastStepTimer >= 0.0f &&
+			pBobState->m_flLastStepTimer < 60.0f &&
+			flStepTimer > pBobState->m_flLastStepTimer + 60.0f );
+		if ( bFootfall )
+		{
 			pBobState->m_flStepInterval = clamp( flStepTimer * 0.001f, 0.15f, 0.8f );
 			pBobState->m_nStepParity++;
 		}
 		float flStride = MAX( 0.15f, pBobState->m_flStepInterval );
+		pBobState->m_flLastStepTimer = flStepTimer;
+
 		if ( flStepTimer > 0.5f )
 		{
-			// Step cycle active: ease the lock fully on (exact within a stride).
+			// Step cycle active: ease the lock fully on.
 			pBobState->m_flStepBlend = MIN( 1.0f, pBobState->m_flStepBlend + flDt * 8.0f );
 		}
 		else
@@ -1737,16 +1754,28 @@ bool CWeaponCSBase::IsUseable()
 			// No step cycle: ease the lock off.
 			pBobState->m_flStepBlend = MAX( 0.0f, pBobState->m_flStepBlend - flDt * 8.0f );
 		}
-		pBobState->m_flStepPhase += ( 2.0f * M_PI * flDt ) / flStride;
-		pBobState->m_flLastStepTimer = flStepTimer;
 
-		// Derived phase: 0 at each footfall, +2PI per stride.
-		float flP = 1.0f - clamp( flStepTimer * 0.001f / flStride, 0.0f, 1.0f );
-		float flDerived = flP * 2.0f * M_PI;
-		float flErr = flDerived - pBobState->m_flStepPhase;
-		flErr -= 2.0f * M_PI * floorf( flErr / ( 2.0f * M_PI ) + 0.5f );
-		float flRenderPhase = pBobState->m_flStepPhase + flErr * pBobState->m_flStepBlend;
-		float flPRender = flRenderPhase / ( 2.0f * M_PI ) - floorf( flRenderPhase / ( 2.0f * M_PI ) );
+		// Smooth local integration: exactly one cycle per stride.
+		pBobState->m_flStepPhase += ( 2.0f * M_PI * flDt ) / flStride;
+		// Keep the phase bounded so frac() never loses precision over a long run.
+		pBobState->m_flStepPhase -= 2.0f * M_PI * floorf( pBobState->m_flStepPhase / ( 2.0f * M_PI ) );
+
+		// The true phase is 0 on the footfall, so remember how far off we are
+		// and bleed it off at a bounded rate: a glide into lock, never a snap
+		// and never a chase of the timer's stair-steps.
+		if ( bFootfall )
+		{
+			float flErr = -pBobState->m_flStepPhase;
+			flErr -= 2.0f * M_PI * floorf( flErr / ( 2.0f * M_PI ) + 0.5f );
+			pBobState->m_flLockError = flErr;
+		}
+		float flCorrStep = 2.0f * M_PI * flDt * 3.0f;	// at most 3 cycles/second
+		float flCorr = clamp( pBobState->m_flLockError * pBobState->m_flStepBlend, -flCorrStep, flCorrStep );
+		pBobState->m_flStepPhase += flCorr;
+		pBobState->m_flLockError -= flCorr;
+
+		float flPRender = pBobState->m_flStepPhase / ( 2.0f * M_PI );
+		flPRender -= floorf( flPRender );
 
 		// cycle01 drives the existing cl_bobup warp below. Vertical hits its
 		// minimum (gun dips) exactly on the footfall; lateral hits alternating
