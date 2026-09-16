@@ -11,8 +11,6 @@
 #include "weapon_csbase.h"
 #include "ammodef.h"
 #include "cs_gamerules.h"
-#include "filesystem.h"
-#include "tier1/utlbuffer.h"
 
 #define ALLOW_WEAPON_SPREAD_DISPLAY	0
 
@@ -51,34 +49,6 @@ ConVar weapon_accuracy_model( "weapon_accuracy_model", "2", FCVAR_REPLICATED | F
 // 1.0 = stock. Scales bullets and crosshair together (both read GetSpread /
 // GetInaccuracy), replicated so client and server agree.
 ConVar weapon_spread_scale( "weapon_spread_scale", "0.0", FCVAR_REPLICATED | FCVAR_ARCHIVE, "Scales all weapon spread and inaccuracy; lower = more accurate.", true, 0.0, true, 2.0 );
-
-// Iron sights / ADS (ported from the "ADS (iron sight) Plugin v1.1").
-// See docs/ads.md and scripts/ads_weapons.txt.
-ConVar cl_ads_enable( "cl_ads_enable", "1", FCVAR_ARCHIVE, "1 = right-click iron sights on weapons with an ADS model." );
-ConVar cl_ads_hide_crosshair( "cl_ads_hide_crosshair", "1", FCVAR_ARCHIVE, "Hide the game crosshair while sighted." );
-ConVar cl_ads_move_speed( "cl_ads_move_speed", "0.66", FCVAR_ARCHIVE, "Walk speed scale while sighted (1.0 = unchanged).", true, 0.1f, true, 1.0f );
-ConVar cl_ads_recoil_scale( "cl_ads_recoil_scale", "0.5", FCVAR_ARCHIVE, "Recoil punch scale while sighted (1.0 = unchanged).", true, 0.0f, true, 1.0f );
-ConVar cl_ads_hold( "cl_ads_hold", "1", FCVAR_ARCHIVE, "1 = hold right mouse to aim, 0 = toggle." );
-ConVar cl_ads_freeaim_blend( "cl_ads_freeaim_blend", "0.15", FCVAR_ARCHIVE, "Seconds for free aim to hand the gun to the sights (and back).", true, 0.0f, true, 1.0f );
-
-// Parsed from scripts/ads_weapons.txt (see ADS_ParseConfig below).
-struct ADSWeapon_t
-{
-	CSWeaponID	id;
-	char		szNormal[64];
-	char		szZoom[64];
-	int			iSequence;
-	float		flSequenceTime;
-	bool		bDisableFireAnim;
-	bool		bOldZoomWeapon;
-	float		flAccuracy;
-	int			iOldReloadModel;
-	int			iZoomFov;
-	int			iNoFovSkinAdd;
-};
-
-static const ADSWeapon_t *ADS_GetWeapon( CSWeaponID id );
-
 
 // ----------------------------------------------------------------------------- //
 // Global functions.
@@ -315,7 +285,6 @@ BEGIN_NETWORK_TABLE( CWeaponCSBase, DT_WeaponCSBase )
 #if !defined( CLIENT_DLL )
 SendPropInt( SENDINFO( m_weaponMode ), 1, SPROP_UNSIGNED ),
 SendPropFloat(SENDINFO(m_fAccuracyPenalty) ),
-SendPropBool( SENDINFO( m_bIronSight ) ),
 // world weapon models have no aminations
 SendPropExclude( "DT_AnimTimeMustBeFirst", "m_flAnimTime" ),
 SendPropExclude( "DT_BaseAnimating", "m_nSequence" ),
@@ -323,7 +292,6 @@ SendPropExclude( "DT_BaseAnimating", "m_nSequence" ),
 #else
 RecvPropInt( RECVINFO( m_weaponMode ) ),
 RecvPropFloat( RECVINFO(m_fAccuracyPenalty)),
-RecvPropBool( RECVINFO( m_bIronSight ) ),
 #endif
 END_NETWORK_TABLE()
 
@@ -336,7 +304,6 @@ BEGIN_PREDICTION_DATA( CWeaponCSBase )
 	DEFINE_PRED_FIELD( m_flAccuracy, FIELD_FLOAT, 0 ),
 	DEFINE_PRED_FIELD( m_weaponMode, FIELD_INTEGER, FTYPEDESC_INSENDTABLE ),
 	DEFINE_PRED_FIELD_TOL( m_fAccuracyPenalty, FIELD_FLOAT, FTYPEDESC_INSENDTABLE, 0.00005f ),
-	DEFINE_PRED_FIELD( m_bIronSight, FIELD_BOOLEAN, FTYPEDESC_INSENDTABLE ),
 END_PREDICTION_DATA()
 #endif
 
@@ -423,10 +390,6 @@ CWeaponCSBase::CWeaponCSBase()
 	m_fAccuracyPenalty = 0.0f;
 
 	m_weaponMode = Primary_Mode;
-
-	m_bIronSight = false;
-	m_bADSSwapped = true;
-	m_flADSSwapTime = 0.0f;
 }
 
 
@@ -585,8 +548,6 @@ void CWeaponCSBase::ItemPostFrame()
 
 	UpdateShieldState();
 
-	UpdateIronSight();
-
 	if ((m_bInReload) && (pPlayer->m_flNextAttack <= gpGlobals->curtime))
 	{
 		// complete the reload.
@@ -599,39 +560,14 @@ void CWeaponCSBase::ItemPostFrame()
 		m_bInReload = false;
 	}
 
-	// Iron sights. Hold mode follows the button directly; toggle mode flips on
-	// the press edge. Either way right-click never reaches a hip alt-fire.
-	bool bADSCapable = AllowsIronSight();
-	bool bADSButton = ( pPlayer->m_nButtons & IN_ATTACK2 ) != 0;
-
-	if ( bADSCapable && cl_ads_hold.GetBool() )
+	if ((pPlayer->m_nButtons & IN_ATTACK2) && (m_flNextSecondaryAttack <= gpGlobals->curtime))
 	{
-		SetIronSight( bADSButton );
-		if ( bADSButton )
-			pPlayer->m_nButtons &= ~IN_ATTACK2;
-		bADSButton = false;
-	}
-
-	if ( bADSButton && (m_flNextSecondaryAttack <= gpGlobals->curtime) )
-	{
-		if ( bADSCapable )
-		{
-			// Toggle on the press edge so holding the button can't spin it.
-			if ( pPlayer->m_afButtonPressed & IN_ATTACK2 )
-				ToggleIronSight();
-
-			pPlayer->m_nButtons &= ~IN_ATTACK2;
-			m_flNextSecondaryAttack = gpGlobals->curtime + 0.2f;
-		}
+		if ( pPlayer->HasShield() )
+			CWeaponCSBase::SecondaryAttack();
 		else
-		{
-			if ( pPlayer->HasShield() )
-				CWeaponCSBase::SecondaryAttack();
-			else
-				SecondaryAttack();
+			SecondaryAttack();
 
-			pPlayer->m_nButtons &= ~IN_ATTACK2;
-		}
+		pPlayer->m_nButtons &= ~IN_ATTACK2;
 	}
 	else if ((pPlayer->m_nButtons & IN_ATTACK) && (m_flNextPrimaryAttack <= gpGlobals->curtime ))
 	{
@@ -761,7 +697,6 @@ void CWeaponCSBase::ItemPostFrame()
 void CWeaponCSBase::ItemBusyFrame()
 {
 	UpdateAccuracyPenalty();
-	UpdateIronSight();
 
 	BaseClass::ItemBusyFrame();
 }
@@ -772,14 +707,6 @@ float CWeaponCSBase::GetInaccuracy() const
 	CCSPlayer *pPlayer = GetPlayerOwner();
 	if ( !pPlayer )
 		return 0.0f;
-
-	// Iron sights: the configured sight accuracy replaces the hip-fire penalty.
-	if ( m_bIronSight )
-	{
-		const ADSWeapon_t *pADS = ADS_GetWeapon( GetWeaponID() );
-		if ( pADS && pADS->flAccuracy >= 0.0f )
-			return pADS->flAccuracy * weapon_spread_scale.GetFloat();
-	}
 
 	const CCSWeaponInfo& weaponInfo = GetCSWpnData();
 
@@ -809,11 +736,6 @@ float CWeaponCSBase::GetMaxSpeed() const
 	// The weapon should have set this in its constructor.
 	float flRet = GetCSWpnData().m_flMaxSpeed;
 	Assert( flRet > 1 );
-
-	// Iron sights slow you to the configured walking pace.
-	if ( m_bIronSight )
-		flRet *= cl_ads_move_speed.GetFloat();
-
 	return flRet;
 }
 
@@ -863,16 +785,6 @@ void CWeaponCSBase::Precache( void )
 	}
 #endif
 
-	// Iron sights: the sighted viewmodel has to be precached server-side before
-	// a client can ever swap to it.
-#ifndef CLIENT_DLL
-	const ADSWeapon_t *pADS = ADS_GetWeapon( GetWeaponID() );
-	if ( pADS )
-	{
-		PrecacheModel( pADS->szZoom );
-	}
-#endif
-
 	PrecacheScriptSound( "Default.ClipEmpty_Pistol" );
 	PrecacheScriptSound( "Default.ClipEmpty_Rifle" );
 
@@ -893,10 +805,6 @@ bool CWeaponCSBase::DefaultDeploy( char *szViewModel, char *szWeaponModel, int i
 	}
 
 	pOwner->SetAnimationExtension( szAnimExt );
-
-	// A freshly deployed weapon is never sighted.
-	m_bIronSight = false;
-	m_bADSSwapped = true;
 
 	SetViewModel();
 	SendWeaponAnim( GetDeployActivity() );
@@ -982,10 +890,6 @@ bool CWeaponCSBase::Holster( CBaseCombatWeapon *pSwitchingTo )
 	CCSPlayer *pPlayer = GetPlayerOwner();
 	if ( !pPlayer )
 		return false;
-
-	// Put the iron sights away so the next deploy starts from the hip model.
-	m_bIronSight = false;
-	m_bADSSwapped = true;
 
 	if ( pPlayer )
 		pPlayer->SetFOV( pPlayer, 0 ); // reset the default FOV.
@@ -1103,293 +1007,9 @@ void CWeaponCSBase::DefaultTouch(CBaseEntity *pOther)
 }
 
 //-----------------------------------------------------------------------------
-// Iron sights / ADS (ported from the "ADS (iron sight) Plugin v1.1" SourceMod
-// plugin by boss/cjsrk). A weapon listed in scripts/ads_weapons.txt can
-// right-click into a sighted viewmodel.
-//
-// The config keeps the plugin's exact line format so weapon packs can be added
-// by pasting the line they already ship:
-//
-//   <weapon><normal v_model><zoom v_model><transition seq><seq time>
-//   <disable fire anim><old zoom weapon><ads accuracy><old reload><zoom fov><no-fov skin add>
-//
-// The transition sequence is played on whichever model is current; the AKITA
-// (ump45) ships 9 = ads_in on the normal model and 9 = ads_out on the zoom
-// model, so one number covers both directions.
-//-----------------------------------------------------------------------------
-#define MAX_ADS_WEAPONS 64
-
-static ADSWeapon_t	g_ADSWeapons[MAX_ADS_WEAPONS];
-static int			g_nADSWeapons = 0;
-static bool			g_bADSParsed = false;
-
-static void ADS_TrimInPlace( char *p )
-{
-	if ( !p )
-		return;
-	int len = (int)strlen( p );
-	while ( len > 0 && ( p[len-1] == ' ' || p[len-1] == '\t' || p[len-1] == '\r' || p[len-1] == '\n' ) )
-		p[--len] = 0;
-	char *s = p;
-	while ( *s == ' ' || *s == '\t' )
-		s++;
-	if ( s != p )
-		memmove( p, s, strlen( s ) + 1 );
-}
-
-static void ADS_ParseConfig( void )
-{
-	if ( g_bADSParsed )
-		return;
-	g_bADSParsed = true;
-	g_nADSWeapons = 0;
-
-	CUtlBuffer buf( 0, 0, CUtlBuffer::TEXT_BUFFER );
-	if ( !g_pFullFileSystem->ReadFile( "scripts/ads_weapons.txt", "GAME", buf ) )
-	{
-		DevMsg( "ADS: no scripts/ads_weapons.txt, iron sights disabled\n" );
-		return;
-	}
-
-	const char *p = (const char *)buf.Base();
-	while ( p && *p && g_nADSWeapons < MAX_ADS_WEAPONS )
-	{
-		const char *pEOL = strchr( p, '\n' );
-		int nLine = pEOL ? (int)( pEOL - p ) : (int)strlen( p );
-		char szLine[512];
-		int n = MIN( nLine, (int)sizeof( szLine ) - 1 );
-		memcpy( szLine, p, n );
-		szLine[n] = 0;
-		p = pEOL ? pEOL + 1 : p + nLine;
-
-		char *pStart = szLine;
-		while ( *pStart == ' ' || *pStart == '\t' || *pStart == '\r' )
-			pStart++;
-
-		// Skip blanks and comments; ADS lines always start with '<'.
-		if ( *pStart != '<' )
-			continue;
-
-		char *fields[11] = { 0 };
-		int nf = 0;
-		char *tok = pStart;
-		while ( nf < 11 )
-		{
-			if ( *tok == '<' )
-				tok++;
-			if ( nf == 10 )
-			{
-				char *gt = strchr( tok, '>' );
-				if ( gt )
-					*gt = 0;
-				fields[nf++] = tok;
-				break;
-			}
-			char *end = strstr( tok, "><" );
-			if ( !end )
-			{
-				nf = 0;
-				break;
-			}
-			*end = 0;
-			fields[nf++] = tok;
-			tok = end + 2;
-		}
-		if ( nf != 11 )
-			continue;
-
-		ADSWeapon_t &w = g_ADSWeapons[g_nADSWeapons];
-		for ( int i = 0; i < 11; i++ )
-			ADS_TrimInPlace( fields[i] );
-
-		if ( !fields[0][0] || !fields[1][0] || !fields[2][0] )
-			continue;
-
-		w.id = AliasToWeaponID( fields[0] );
-		if ( w.id == WEAPON_NONE )
-		{
-			DevMsg( "ADS: unknown weapon '%s' in ads_weapons.txt\n", fields[0] );
-			continue;
-		}
-
-		Q_strncpy( w.szNormal, fields[1], sizeof( w.szNormal ) );
-		Q_strncpy( w.szZoom, fields[2], sizeof( w.szZoom ) );
-		w.iSequence = fields[3][0] ? atoi( fields[3] ) : -1;
-		w.flSequenceTime = fields[4][0] ? (float)atof( fields[4] ) : 0.0f;
-		w.bDisableFireAnim = ( fields[5][0] && atoi( fields[5] ) == 1 );
-		w.bOldZoomWeapon = ( fields[6][0] && atoi( fields[6] ) == 1 );
-		w.flAccuracy = fields[7][0] ? (float)atof( fields[7] ) : 0.015f;
-		w.iOldReloadModel = fields[8][0] ? atoi( fields[8] ) : 0;
-		w.iZoomFov = fields[9][0] ? atoi( fields[9] ) : 90;
-		w.iNoFovSkinAdd = fields[10][0] ? atoi( fields[10] ) : 0;
-
-		g_nADSWeapons++;
-	}
-
-	DevMsg( "ADS: loaded %d iron-sight weapon(s)\n", g_nADSWeapons );
-}
-
-static const ADSWeapon_t *ADS_GetWeapon( CSWeaponID id )
-{
-	ADS_ParseConfig();
-	for ( int i = 0; i < g_nADSWeapons; i++ )
-	{
-		if ( g_ADSWeapons[i].id == id )
-			return &g_ADSWeapons[i];
-	}
-	return NULL;
-}
-
-bool CWeaponCSBase::AllowsIronSight() const
-{
-	if ( !cl_ads_enable.GetBool() )
-		return false;
-
-	const ADSWeapon_t *p = ADS_GetWeapon( GetWeaponID() );
-
-	// Old-zoom weapons (aug/sg552) keep their own native right-click zoom, so
-	// they never take the toggle path; UpdateIronSight mirrors their scope.
-	return ( p != NULL && !p->bOldZoomWeapon );
-}
-
-void CWeaponCSBase::ToggleIronSight()
-{
-	SetIronSight( !m_bIronSight );
-}
-
-void CWeaponCSBase::SetIronSight( bool bOn )
-{
-	if ( m_bIronSight == bOn )
-		return;
-
-	const ADSWeapon_t *p = ADS_GetWeapon( GetWeaponID() );
-	if ( !p )
-		return;
-
-	// Old-zoom weapons (aug/sg552) are driven by the game's native scope rather
-	// than a right-click toggle, so AllowsIronSight()'s toggle guard doesn't
-	// apply to them (UpdateIronSight calls this to mirror the FOV).
-	if ( bOn && !p->bOldZoomWeapon && !AllowsIronSight() )
-		return;
-
-	m_bIronSight = bOn;
-	m_bADSSwapped = false;
-	m_flADSSwapTime = gpGlobals->curtime + MAX( p->flSequenceTime, 0.05f );
-
-	// Keep WeaponIdle from grabbing the viewmodel: it sends ACT_VM_IDLE the
-	// moment m_flTimeWeaponIdle elapses, which would cut the ads_in/ads_out
-	// transition short (this is the "hold ADS breaks" bug).
-	m_flTimeWeaponIdle = m_flADSSwapTime + 0.1f;
-
-	// The viewmodel model and its transition are server-owned and networked, so
-	// the client only ever gets one authoritative answer (no prediction flicker).
-#ifndef CLIENT_DLL
-	CBasePlayer *pPlayer = ToBasePlayer( GetOwner() );
-	if ( pPlayer )
-	{
-		CBaseViewModel *vm = pPlayer->GetViewModel( m_nViewModelIndex, false );
-		if ( vm && p->iSequence >= 0 )
-		{
-			vm->SendViewModelMatchingSequence( p->iSequence );
-		}
-	}
-#endif
-
-	// Debounce so a held button can't spin the state. The native-zoom mirror
-	// doesn't debounce: it tracks the game's own secondary-attack cooldown.
-	if ( !p->bOldZoomWeapon )
-		m_flNextSecondaryAttack = gpGlobals->curtime + 0.2f;
-}
-
-void CWeaponCSBase::ClearIronSightImmediate()
-{
-	m_bIronSight = false;
-	m_bADSSwapped = true;
-
-	// No transition: the sight and hip models share the reload/fire sequence
-	// indices on ADS packs, so swapping the model keeps the running animation.
-#ifndef CLIENT_DLL
-	CBasePlayer *pPlayer = ToBasePlayer( GetOwner() );
-	if ( pPlayer )
-	{
-		CBaseViewModel *vm = pPlayer->GetViewModel( m_nViewModelIndex, false );
-		if ( vm )
-		{
-			vm->SetWeaponModel( GetViewModel(), this );
-		}
-	}
-#endif
-}
-
-void CWeaponCSBase::UpdateIronSight()
-{
-	const ADSWeapon_t *pCfg = ADS_GetWeapon( GetWeaponID() );
-
-	if ( pCfg && pCfg->bOldZoomWeapon )
-	{
-		// Old-zoom weapons (aug/sg552) don't toggle their sights: their
-		// right-click is the game's native scope. Mirror that scope so the
-		// sight model comes up while zoomed and drops on unzoom. A reload
-		// drops the sights immediately (no transition) so it doesn't cut the
-		// reload animation, exactly like the normal toggle path.
-		if ( m_bInReload )
-		{
-			if ( m_bIronSight )
-				ClearIronSightImmediate();
-		}
-		else
-		{
-			CCSPlayer *pPlayer = GetPlayerOwner();
-			bool bZoomed = ( pPlayer && pPlayer->GetFOV() != pPlayer->GetDefaultFOV() );
-			SetIronSight( bZoomed );
-		}
-	}
-	else if ( m_bIronSight )
-	{
-		// Leave the sights when the weapon can't hold them any more. A reload
-		// takes the viewmodel over instantly so the reload animation is not
-		// interrupted.
-		if ( m_bInReload )
-			ClearIronSightImmediate();
-		else if ( !AllowsIronSight() )
-			SetIronSight( false );
-	}
-
-	if ( !m_bADSSwapped && gpGlobals->curtime >= m_flADSSwapTime )
-	{
-		const ADSWeapon_t *p = ADS_GetWeapon( GetWeaponID() );
-		if ( !p )
-			return;
-
-		m_bADSSwapped = true;
-
-#ifndef CLIENT_DLL
-		CBasePlayer *pPlayer = ToBasePlayer( GetOwner() );
-		if ( pPlayer )
-		{
-			CBaseViewModel *vm = pPlayer->GetViewModel( m_nViewModelIndex, false );
-			if ( vm )
-			{
-				vm->SetWeaponModel( m_bIronSight ? p->szZoom : GetViewModel(), this );
-
-				// Land on the new model's idle; otherwise it inherits the
-				// transition sequence index, which means something else on the
-				// sight model (its ads_out lives at the same index).
-				int iIdle = vm->SelectWeightedSequence( ACT_VM_IDLE );
-				if ( iIdle >= 0 )
-					vm->SendViewModelMatchingSequence( iIdle );
-			}
-		}
-#endif
-	}
-}
-
-//-----------------------------------------------------------------------------
 // Free aim: weapons that are aimed (guns) may lead the camera; things thrown
 // or swung from the body (grenades, C4, knife) follow the view so their
-// animation and travel match what the player is looking at. Iron sights keep
-// free aim eligible - the player's free-aim sim blends the gun onto the camera
-// while sighted (see c_cs_player.cpp), so shoulders are smooth, not a snap.
+// animation and travel match what the player is looking at.
 //-----------------------------------------------------------------------------
 bool CWeaponCSBase::AllowsFreeAim() const
 {
@@ -1428,10 +1048,6 @@ bool CWeaponCSBase::AllowsFreeAim() const
 		CCSPlayer* pPlayer = (CCSPlayer*)C_BasePlayer::GetLocalPlayer();
 
 		if ( !pPlayer )
-			return;
-
-		// Iron sights hide the crosshair.
-		if ( m_bIronSight && cl_ads_hide_crosshair.GetBool() )
 			return;
 
 		// localplayer must be owner if not in Spec mode
