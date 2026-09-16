@@ -380,6 +380,8 @@ void CBaseViewModel::SendViewModelMatchingSequence( int sequence )
 
 #if defined( CLIENT_DLL )
 #include "ivieweffects.h"
+
+ConVar viewmodel_recoil( "viewmodel_recoil", "1.0", FCVAR_ARCHIVE, "Amount of weapon recoil/aimpunch shown on the viewmodel (0 = steady gun)", true, 0.0f, true, 1.0f );
 #endif
 
 #ifdef CSTRIKE_DLL
@@ -393,6 +395,14 @@ void CBaseViewModel::CalcViewModelView( CBasePlayer *owner, const Vector& eyePos
 	QAngle vmangoriginal = eyeAngles;
 	QAngle vmangles = eyeAngles;
 	Vector vmorigin = eyePosition;
+
+	// CS:GO-style viewmodel recoil: tilt the gun with the player's punch angle.
+	// Visual only — the real kick lives in CCSPlayer::KickBack (weapon_recoil_scale).
+	if ( owner )
+	{
+		QAngle punchAngle = owner->m_Local.m_vecPunchAngle;
+		vmangles += punchAngle * viewmodel_recoil.GetFloat() * 0.5f;
+	}
 
 	CBaseCombatWeapon *pWeapon = m_hWeapon.Get();
 	//Allow weapon lagging

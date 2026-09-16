@@ -31,6 +31,10 @@ public:
 	virtual ~CPredictedViewModel( void );
 							
 	virtual void CalcViewModelLag( Vector& origin, QAngle& angles, QAngle& original_angles );
+	virtual void ApplyViewModelPitchAndDip( CBasePlayer *owner, Vector& origin, QAngle& angles );
+
+	virtual void CalcViewModelView( CBasePlayer *owner, const Vector& eyePosition,
+						const QAngle& eyeAngles );
 
 #if defined( CLIENT_DLL )
 	virtual bool ShouldPredict( void )
@@ -49,6 +53,10 @@ private:
 	// This is used to lag the angles.
 	CInterpolatedVar<QAngle> m_LagAnglesHistory;
 	QAngle m_vLagAngles;
+	Vector m_vPredictedOffset;
+
+	// Gun-lower state: the weapon dips while airborne.
+	QAngle m_vLoweredWeaponOffset;
 
 	CPredictedViewModel( const CPredictedViewModel & ); // not defined, not accessible
 
