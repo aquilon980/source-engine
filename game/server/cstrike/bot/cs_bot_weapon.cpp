@@ -196,8 +196,11 @@ void CCSBot::SetAimOffset( float accuracy )
 
 		float focusAccuracy = focusInterval / focusTime;
 
-		// limit how much "focus" will help
-		const float maxFocusAccuracy = 0.75f;
+		// limit how much "focus" will help — scaled by skill so easy bots
+		// plateau far below laser accuracy while experts (skill 1.0) keep
+		// the exact stock 0.75 cap. Stock let every bot focus to 0.75 no
+		// matter how bad its profile was (superhuman easy aim).
+		const float maxFocusAccuracy = 0.35f + 0.4f * accuracy;
 		if (focusAccuracy > maxFocusAccuracy)
 			focusAccuracy = maxFocusAccuracy;
 
