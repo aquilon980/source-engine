@@ -60,6 +60,8 @@ public:
 	virtual		int			KeyEvent( int down, ButtonCode_t keynum, const char *pszCurrentBinding );
 	virtual		kbutton_t	*FindKey( const char *name );
 
+	// Joystick and gamepad support has been removed entirely: these stay only
+	// because IInput declares them pure virtual. All bodies are no-ops.
 	virtual		void		ControllerCommands( void );
 	virtual		void		Joystick_Advanced( void );
 	virtual		void		Joystick_SetSampleTime(float frametime);
@@ -78,6 +80,7 @@ public:
 
 //	virtual		bool		IsNoClipping( void );
 	virtual		float		GetLastForwardMove( void );
+	// Joystick getters: pure virtual on IInput, bodies always return 0.
 	virtual		float		Joystick_GetForward( void );
 	virtual		float		Joystick_GetSide( void );
 	virtual		float		Joystick_GetPitch( void );
@@ -140,11 +143,8 @@ private:
 	void		TouchScale( float &dx, float &dy );
 	void		ApplyTouch( QAngle &viewangles, CUserCmd *cmd, float dx, float dy );
 
-	// Joystick  movement input helpers
+	// Movement input helpers (mouse/keyboard/touch only)
 	void		ControllerMove ( float frametime, CUserCmd *cmd );
-	void		JoyStickMove ( float frametime, CUserCmd *cmd );
-	float		ScaleAxisValue( const float axisValue, const float axisThreshold );
-	virtual float JoyStickAdjustYaw( float flSpeed ) { return flSpeed; }
 
 	// Call this to get the cursor position. The call will be logged in the VCR file if there is one.
 	void		GetMousePos(int &x, int &y);
@@ -157,26 +157,6 @@ private:
 
 // Private Data
 private:
-	typedef struct
-	{
-		unsigned int AxisFlags;
-		unsigned int AxisMap;
-		unsigned int ControlMap;
-	} joy_axis_t;
-
-	void		DescribeJoystickAxis( char const *axis, joy_axis_t *mapping );
-	char const	*DescribeAxis( int index );
-
-	enum
-	{
-		GAME_AXIS_NONE = 0,
-		GAME_AXIS_FORWARD,
-		GAME_AXIS_PITCH,
-		GAME_AXIS_SIDE,
-		GAME_AXIS_YAW,
-		MAX_GAME_AXES
-	};
-
 	enum
 	{
 		CAM_COMMAND_NONE = 0,
@@ -197,17 +177,12 @@ private:
 	bool		m_fMouseInitialized;
 	// Is the mosue active?
 	bool		m_fMouseActive;
-	// Has the joystick advanced initialization been run?
-	bool		m_fJoystickAdvancedInit;
-	// Used to support hotplugging by reinitializing the advanced joystick system when we toggle between some/none joysticks.
-	bool		m_fHadJoysticks;
 
 	// Accumulated mouse deltas
 	float		m_flAccumulatedMouseXMovement;
 	float		m_flAccumulatedMouseYMovement;
 	float		m_flPreviousMouseXPosition;
 	float		m_flPreviousMouseYPosition;
-	float		m_flRemainingJoystickSampleTime;
 	float		m_flKeyboardSampleTime;
 
 	// Flag to restore systemparameters when exiting
@@ -219,8 +194,6 @@ private:
 	bool		m_rgCheckMouseParam[ NUM_MOUSE_PARAMS ];
 	// Are the parameters valid
 	bool		m_fMouseParmsValid;
-	// Joystick Axis data
-	joy_axis_t m_rgAxes[ MAX_JOYSTICK_AXES ];
 	// List of queryable keys
 	CKeyboardKey *m_pKeys;
 	
@@ -247,11 +220,6 @@ private:
 
 	float		m_flLastForwardMove;
 
-	float m_flPreviousJoystickForward;
-	float m_flPreviousJoystickSide;
-	float m_flPreviousJoystickPitch;
-	float m_flPreviousJoystickYaw;
-
 	class CVerifiedUserCmd
 	{
 	public:
@@ -274,16 +242,11 @@ private:
 
 extern kbutton_t in_strafe;
 extern kbutton_t in_speed;
-extern kbutton_t in_jlook;
 extern kbutton_t in_graph;  
 extern kbutton_t in_moveleft;
 extern kbutton_t in_moveright;
 extern kbutton_t in_forward;
 extern kbutton_t in_back;
-extern kbutton_t in_joyspeed;
-
-extern class ConVar in_joystick;
-extern class ConVar joy_autosprint;
 
 extern void KeyDown( kbutton_t *b, const char *c );
 extern void KeyUp( kbutton_t *b, const char *c );

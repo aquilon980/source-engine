@@ -43,12 +43,6 @@ public:
 	{
 		if ( code == KEY_XBUTTON_A || code == STEAMCONTROLLER_A )
 		{
-			ConVarRef var( "joystick" );
-			if ( var.IsValid() && !var.GetBool() )
-			{
-				var.SetValue( true );
-			}
-
 			ConVarRef var2( "hud_fastswitch" );
 			if ( var2.IsValid() && var2.GetInt() != 2 )
 			{

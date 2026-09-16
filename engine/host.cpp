@@ -1265,14 +1265,6 @@ void Host_WriteConfiguration( const char *filename, bool bAllVars )
 	Key_WriteBindings( configBuff );
 	cv->WriteVariables( configBuff, bAllVars );
 
-#if !defined( SWDS )
-		bool down;
-		if ( g_ClientDLL->IN_IsKeyDown( "in_jlook", down ) && down )
-		{
-			configBuff.Printf( "+jlook\n" );
-		}
-#endif // SWDS
-
 	if ( !configBuff.TellMaxPut() )
 	{
 		// nothing to write

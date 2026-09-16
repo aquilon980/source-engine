@@ -21,7 +21,6 @@ static void initKeymap(void);
 #ifdef _X360
 #include "xbox/xbox_win32stubs.h"
 #endif
-ConVar joy_xcontroller_found( "joy_xcontroller_found", "1", FCVAR_HIDDEN, "Automatically set to 1 if an xcontroller has been detected." );
 
 //-----------------------------------------------------------------------------
 // Singleton instance
@@ -165,20 +164,13 @@ InitReturnVal_t CInputSystem::Init()
 	ButtonCode_InitKeyTranslationTable();
 	ButtonCode_UpdateScanCodeLayout();
 
-	joy_xcontroller_found.SetValue( 0 );
-	
 	if( !m_bConsoleTextMode )
 		InitializeTouch();
-	
-	if ( IsPC() && !m_bConsoleTextMode )
-	{
-		InitializeJoysticks();
-		if ( m_bXController )
-			joy_xcontroller_found.SetValue( 1 );
-
 
 #if defined( PLATFORM_WINDOWS_PC )
-		// NVNT try and load and initialize through the haptic dll, but only if the drivers are installed
+	// NVNT try and load and initialize through the haptic dll, but only if the drivers are installed
+	if ( IsPC() && !m_bConsoleTextMode )
+	{
 		HMODULE hdl = LoadLibraryEx( "hdl.dll", NULL, LOAD_LIBRARY_AS_DATAFILE );
 
 		if ( hdl )
@@ -190,8 +182,8 @@ InitReturnVal_t CInputSystem::Init()
 			}
 			FreeLibrary( hdl );
 		}
-#endif
 	}
+#endif
 
 #if defined( _X360 )
 		SetPrimaryUserId( XBX_GetPrimaryUserId() );
@@ -249,11 +241,6 @@ void CInputSystem::Shutdown()
 	}
 #endif
 	
-	if ( IsPC() )
-	{
-		ShutdownJoysticks();
-	}
-
 	BaseClass::Shutdown();
 }
 
@@ -877,12 +864,10 @@ void CInputSystem::PollInputState()
 	InputState_t &queuedState = m_InputState[ INPUT_STATE_QUEUED ];
 	CopyInputState( &m_InputState[ INPUT_STATE_CURRENT ], queuedState, true );
 
-	// Sample the joystick
+	// Sample attached devices (touch etc.; joystick/gamepad sampling is gone)
 	SampleDevices();
 
 	// NOTE: This happens after SampleDevices since that updates LastSampleTick
-	// Also, I believe it's correct to post the joystick events with
-	// the LastPollTick not updated (not 100% sure though)
 	m_nLastPollTick = m_nLastSampleTick;
 
 #if defined( PLATFORM_WINDOWS_PC )
@@ -971,11 +956,11 @@ void CInputSystem::SetPrimaryUserId( int userId )
 }
 
 //-----------------------------------------------------------------------------
-//	Purpose: Forwards rumble info to attached devices
+// Forwards rumble info to attached devices. Joystick/gamepad support is
+// removed, so there is no device to forward to.
 //-----------------------------------------------------------------------------
 void CInputSystem::SetRumble( float fLeftMotor, float fRightMotor, int userId )
 {
-	SetXDeviceRumble( fLeftMotor, fRightMotor, userId );
 }
 
 
@@ -1007,21 +992,20 @@ void CInputSystem::StopRumble( void )
 
 
 //-----------------------------------------------------------------------------
-// Joystick interface
+// Joystick and gamepad support is removed: no joystick is ever present and
+// enabling input for one is a no-op. (Kept so IInputSystem callers link.)
 //-----------------------------------------------------------------------------
 int CInputSystem::GetJoystickCount() const
 {
-	return m_nJoystickCount;
+	return 0;
 }
 
 void CInputSystem::EnableJoystickInput( int nJoystick, bool bEnable )
 {
-	m_JoysticksEnabled.SetFlag( 1 << nJoystick, bEnable ); 
 }
 
 void CInputSystem::EnableJoystickDiagonalPOV( int nJoystick, bool bEnable )
 {
-	m_pJoystickInfo[ nJoystick ].m_bDiagonalPOVControlEnabled = bEnable;
 }
 
 //-----------------------------------------------------------------------------
@@ -1532,12 +1516,6 @@ bool CInputSystem::GetRawMouseAccumulators( int& accumX, int& accumY )
 
 void CInputSystem::SetConsoleTextMode( bool bConsoleTextMode )
 {
-	/* If someone calls this after init, shut it down. */
-	if ( bConsoleTextMode && m_bJoystickInitialized )
-	{
-		ShutdownJoysticks();
-	}
-
 	m_bConsoleTextMode = bConsoleTextMode;
 }
 

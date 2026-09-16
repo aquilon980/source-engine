@@ -38,7 +38,6 @@
 #include "haptics/haptic_utils.h"
 #include <vgui/ISurface.h>
 
-extern ConVar in_joystick;
 extern ConVar cam_idealpitch;
 extern ConVar cam_idealyaw;
 
@@ -78,7 +77,6 @@ ConVar cl_backspeed( "cl_backspeed", "450", FCVAR_REPLICATED | FCVAR_CHEAT );
 #endif // CSTRIKE_DLL
 ConVar lookspring( "lookspring", "0", FCVAR_ARCHIVE );
 ConVar lookstrafe( "lookstrafe", "0", FCVAR_ARCHIVE );
-ConVar in_joystick( "joystick","0", FCVAR_ARCHIVE );
 
 ConVar thirdperson_platformer( "thirdperson_platformer", "0", 0, "Player will aim in the direction they are moving." );
 ConVar thirdperson_screenspace( "thirdperson_screenspace", "0", 0, "Movement will be relative to the camera, eg: left means screen-left" );
@@ -112,7 +110,6 @@ state bit 2 is edge triggered on the down to up transition
 
 kbutton_t	in_speed;
 kbutton_t	in_walk;
-kbutton_t	in_jlook;
 kbutton_t	in_strafe;
 kbutton_t	in_commandermousemove;
 kbutton_t	in_forward;
@@ -121,7 +118,6 @@ kbutton_t	in_moveleft;
 kbutton_t	in_moveright;
 // Display the netgraph
 kbutton_t	in_graph;  
-kbutton_t	in_joyspeed;		// auto-speed key from the joystick (only works for player movement, not vehicles)
 
 static	kbutton_t	in_klook;
 kbutton_t	in_left;
@@ -164,16 +160,6 @@ void IN_CenterView_f (void)
 			engine->SetViewAngles( viewangles );
 		}
 	}
-}
-
-/*
-===========
-IN_Joystick_Advanced_f
-===========
-*/
-void IN_Joystick_Advanced_f (void)
-{
-	::input->Joystick_Advanced();
 }
 
 /*
@@ -333,7 +319,6 @@ void CInput::Init_Keyboard( void )
 	m_pKeys = NULL;
 
 	AddKeyButton( "in_graph", &in_graph );
-	AddKeyButton( "in_jlook", &in_jlook );
 }
 
 /*
@@ -438,8 +423,6 @@ void IN_BreakUp( const CCommand &args )
 };
 void IN_KLookDown ( const CCommand &args ) {KeyDown(&in_klook, args[1] );}
 void IN_KLookUp ( const CCommand &args ) {KeyUp(&in_klook, args[1] );}
-void IN_JLookDown ( const CCommand &args ) {KeyDown(&in_jlook, args[1] );}
-void IN_JLookUp ( const CCommand &args ) {KeyUp(&in_jlook, args[1] );}
 void IN_UpDown( const CCommand &args ) {KeyDown(&in_up, args[1] );}
 void IN_UpUp( const CCommand &args ) {KeyUp(&in_up, args[1] );}
 void IN_DownDown( const CCommand &args ) {KeyDown(&in_down, args[1] );}
@@ -946,8 +929,6 @@ void CInput::ControllerMove( float frametime, CUserCmd *cmd )
 		}
 	}
 
-	JoyStickMove( frametime, cmd);
-
 	TouchMove( cmd );
 
 	// NVNT if we have a haptic device..
@@ -1193,11 +1174,11 @@ void CInput::CreateMove ( int sequence_number, float input_sample_frametime, boo
 	cmd->buttons = GetButtonBits( 1 );
 #endif
 
-	// Using joystick?
+	// Using a motion/touch controller? Flag directional movement buttons.
 #ifdef SIXENSE
-	if ( in_joystick.GetInt() || g_pSixenseInput->IsEnabled() || touch_enable.GetInt() )
+	if ( g_pSixenseInput->IsEnabled() || touch_enable.GetInt() )
 #else
-	if ( in_joystick.GetInt() || touch_enable.GetInt() )
+	if ( touch_enable.GetInt() )
 #endif
 	{
 		if ( cmd->forwardmove > 0 )
@@ -1601,8 +1582,6 @@ static ConCommand endjump("-jump", IN_JumpUp);
 static ConCommand impulse("impulse", IN_Impulse);
 static ConCommand startklook("+klook", IN_KLookDown);
 static ConCommand endklook("-klook", IN_KLookUp);
-static ConCommand startjlook("+jlook", IN_JLookDown);
-static ConCommand endjlook("-jlook", IN_JLookUp);
 static ConCommand startduck("+duck", IN_DuckDown);
 static ConCommand endduck("-duck", IN_DuckUp);
 static ConCommand startreload("+reload", IN_ReloadDown);
@@ -1620,7 +1599,6 @@ static ConCommand endgraph("-graph", IN_GraphUp);
 static ConCommand startbreak("+break",IN_BreakDown);
 static ConCommand endbreak("-break",IN_BreakUp);
 static ConCommand force_centerview("force_centerview", IN_CenterView_f);
-static ConCommand joyadvancedupdate("joyadvancedupdate", IN_Joystick_Advanced_f, "", FCVAR_CLIENTCMD_CAN_EXECUTE);
 static ConCommand startzoom("+zoom", IN_ZoomDown);
 static ConCommand endzoom("-zoom", IN_ZoomUp);
 static ConCommand endgrenade1( "-grenade1", IN_Grenade1Up );
@@ -1661,8 +1639,6 @@ void CInput::Init_All (void)
 	m_rgNewMouseParms[ MOUSE_SPEED_FACTOR ] = 1;		// 0 = disabled, 1 = threshold 1 enabled, 2 = threshold 2 enabled
 
 	m_fMouseParmsValid	= false;
-	m_fJoystickAdvancedInit = false;
-	m_fHadJoysticks = false;
 	m_flLastForwardMove = 0.0;
 
 	// Initialize inputs

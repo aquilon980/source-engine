@@ -28,7 +28,6 @@
 int ScreenTransform( const Vector& point, Vector& screen );
 
 extern ConVar default_fov;
-extern ConVar joy_response_move_vehicle;
 
 
 IMPLEMENT_CLIENTCLASS_DT(C_PropVehicleDriveable, DT_PropVehicleDriveable, CPropVehicleDriveable)
@@ -97,11 +96,12 @@ C_PropVehicleDriveable::~C_PropVehicleDriveable()
 
 
 //-----------------------------------------------------------------------------
-// By default all driveable vehicles use the curve defined by the convar.
+// Joystick/gamepad support is removed; the response curve is dead input.
+// Return the old default (6, the custom vehicle curve) so the signature stays.
 //-----------------------------------------------------------------------------
 int C_PropVehicleDriveable::GetJoystickResponseCurve() const
 {
-	return joy_response_move_vehicle.GetInt();
+	return 6;
 }
 
 

@@ -47,8 +47,6 @@ ConVar r_AirboatPitchCurveZero( "r_AirboatPitchCurveZero", "25.0", FCVAR_CHEAT )
 ConVar r_AirboatPitchCurveLinear( "r_AirboatPitchCurveLinear", "60.0", FCVAR_CHEAT );	// Pitch greater than this is mapped directly.
 																						// Spline in between.
 
-ConVar airboat_joy_response_move( "airboat_joy_response_move", "1" );					// Quadratic steering response
-																						
 
 #define AIRBOAT_DELTA_LENGTH_MAX	12.0f			// 1 foot
 #define AIRBOAT_FRAMETIME_MIN		1e-6
@@ -226,12 +224,12 @@ int C_PropAirboat::GetPrimaryAmmoClip() const
 	return -1; 
 }
 
-//-----------------------------------------------------------------------------
-// The airboat prefers a more peppy response curve for joystick control.
-//-----------------------------------------------------------------------------
+//--------------------------------------------------------------------------
+// Joystick/gamepad support is removed; the airboat kept its old default (1).
+//--------------------------------------------------------------------------
 int C_PropAirboat::GetJoystickResponseCurve() const
 {
-	return airboat_joy_response_move.GetInt();
+	return 1;
 }
 
 //-----------------------------------------------------------------------------

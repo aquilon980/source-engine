@@ -10,8 +10,9 @@
 #include "rumble_shared.h"
 #include "inputsystem/iinputsystem.h"
 
-ConVar cl_rumblescale( "cl_rumblescale", "1.0", FCVAR_ARCHIVE | FCVAR_ARCHIVE_XBOX, "Scale sensitivity of rumble effects (0 to 1.0)" ); 
-ConVar cl_debugrumble( "cl_debugrumble", "0", FCVAR_ARCHIVE, "Turn on rumble debugging spew" );
+// Gamepad rumble output has been removed: the scale/debug cvars are gone and
+// the mixer below never drives hardware. The effect bookkeeping stays
+// so weapon / screenshake callers keep compiling, but nothing reaches a motor.
 
 #define MAX_RUMBLE_CHANNELS 3	// Max concurrent rumble effects
 
@@ -690,11 +691,6 @@ void CRumbleEffects::ComputeAmplitudes( RumbleChannel_t *pChannel, float curtime
 	left *= pChannel->scale;
 	right *= pChannel->scale;
 
-	if( cl_debugrumble.GetBool() )
-	{
-		Msg("Seconds:%d Fraction:%f Sample:%d  L:%f R:%f\n", seconds, fraction, sample, left, right );
-	}
-
 	if( !m_bOutputEnabled )
 	{
 		// Send zeroes to stop any current rumbling, and to keep it silenced.
@@ -723,56 +719,12 @@ void CRumbleEffects::UpdateScreenShakeRumble( float shake, float balance )
 
 //---------------------------------------------------------
 //---------------------------------------------------------
+//---------------------------------------------------------
+// No gamepad to drive: never compute or send motor values.
+//---------------------------------------------------------
 void CRumbleEffects::UpdateEffects( float curtime )
 {
-	float fLeftMotor = 0.0f;
-	float fRightMotor = 0.0f;
-
-	for( int i = 0 ; i < MAX_RUMBLE_CHANNELS ; i++ )
-	{
-		// Expire old channels
-		RumbleChannel_t *pChannel = & m_Channels[i];
-
-		if( pChannel->in_use )
-		{
-			float left, right;
-
-			ComputeAmplitudes( pChannel, curtime, &left, &right );
-			
-			fLeftMotor += left;
-			fRightMotor += right;
-		}
-	}
-
-	// Add in any screenshake
-	float shakeLeft = 0.0f;
-	float shakeRight = 0.0f;
-	if( m_flScreenShake != 0.0f )
-	{
-		if( m_flScreenShake < 0.0f )
-		{
-			shakeLeft = fabs( m_flScreenShake );
-		}
-		else
-		{
-			shakeRight = m_flScreenShake;
-		}
-	}
-
-	fLeftMotor += shakeLeft;
-	fRightMotor += shakeRight;
-
-	fLeftMotor *= cl_rumblescale.GetFloat();
-	fRightMotor *= cl_rumblescale.GetFloat();
-
-	if( engine->IsPaused() )
-	{
-		// Send nothing when paused.
-		fLeftMotor = 0.0f;
-		fRightMotor = 0.0f;
-	}
-
-	inputsystem->SetRumble( fLeftMotor, fRightMotor );
+	(void)curtime;
 }
 
 //---------------------------------------------------------
@@ -780,8 +732,6 @@ void CRumbleEffects::UpdateEffects( float curtime )
 void StopAllRumbleEffects( void )
 {
 	g_RumbleEffects.StopAllEffects();
-
-	inputsystem->StopRumble();
 }
 
 //---------------------------------------------------------
