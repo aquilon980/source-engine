@@ -363,7 +363,10 @@ void CReplayMovieManager::SetupColorCorrection()
 
 void CReplayMovieManager::SetupMotionBlur()
 {
-	g_pEngine->Cbuf_AddText( "mat_motion_blur_enabled 1\n" );
+	// Motion blur is removed from the game entirely (see docs/graphics-mac.md):
+	// there is no mat_motion_blur_enabled cvar anymore, so there is nothing to
+	// force on for captures. Replay video-export blur (rendermovieparams) is a
+	// separate feature and is untouched.
 }
 
 void CReplayMovieManager::SetupVideo( RenderMovieParams_t const &params )

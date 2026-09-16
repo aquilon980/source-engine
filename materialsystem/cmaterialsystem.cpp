@@ -1738,17 +1738,17 @@ static void MatProxyCallback( IConVar *pConVar, const char *old, float flOldValu
 //-----------------------------------------------------------------------------
 // Convars that control the config record
 //-----------------------------------------------------------------------------
-static ConVar mat_vsync(			"mat_vsync", "0", FCVAR_ALLOWED_IN_COMPETITIVE, "Force sync to vertical retrace", true, 0.0, true, 1.0 );
+static ConVar mat_vsync(			"mat_vsync", "1", FCVAR_ALLOWED_IN_COMPETITIVE, "Force sync to vertical retrace", true, 0.0, true, 1.0 );
 static ConVar mat_forcehardwaresync( "mat_forcehardwaresync", IsPC() ? "1" : "0", FCVAR_ALLOWED_IN_COMPETITIVE );
 
 // Texture-related
-static ConVar mat_trilinear(		"mat_trilinear", "0", FCVAR_ALLOWED_IN_COMPETITIVE );
+static ConVar mat_trilinear(		"mat_trilinear", "1", FCVAR_ALLOWED_IN_COMPETITIVE );
 #ifdef _X360 // The code that reads this out of moddefaults.txt is #if'd out for the 360, so force aniso to 2 here.
 	static ConVar mat_forceaniso( "mat_forceaniso", "2", FCVAR_ARCHIVE ); // 0 = Bilinear, 1 = Trilinear, 2+ = Aniso
 #elif defined ( OSX )
-	static ConVar mat_forceaniso( "mat_forceaniso", "1", FCVAR_ARCHIVE, "Filtering level", true, 0, true, 8 ); // 0 = Bilinear, 1 = Trilinear, 2+ = Aniso
+	static ConVar mat_forceaniso( "mat_forceaniso", "8", FCVAR_ARCHIVE, "Filtering level", true, 0, true, 16 ); // 0 = Bilinear, 1 = Trilinear, 2+ = Aniso. 8x is ~free on Apple Silicon (TBDR, huge bandwidth).
 #else
-	static ConVar mat_forceaniso( "mat_forceaniso", "1", FCVAR_ARCHIVE ); // 0 = Bilinear, 1 = Trilinear, 2+ = Aniso
+	static ConVar mat_forceaniso( "mat_forceaniso", "8", FCVAR_ARCHIVE ); // 0 = Bilinear, 1 = Trilinear, 2+ = Aniso. 8x is ~free on modern GPUs.
 #endif
 static ConVar mat_filterlightmaps(	"mat_filterlightmaps", "1" );
 static ConVar mat_filtertextures(	"mat_filtertextures", "1" );
@@ -1816,13 +1816,15 @@ static ConVar mat_fastspecular(		"mat_fastspecular", "1", 0, "Enable/Disable spe
 static ConVar mat_fastnobump(		"mat_fastnobump", "0", FCVAR_CHEAT ); // Binds 1-texel normal map for quick internal testing
 
 // These are not controlled by the material system, but are limited by settings in the material system
-static ConVar r_shadowrendertotexture(		"r_shadowrendertotexture", "0", FCVAR_ARCHIVE );
+static ConVar r_shadowrendertotexture(		"r_shadowrendertotexture", "1", FCVAR_ARCHIVE );
 static ConVar r_flashlightdepthtexture(		"r_flashlightdepthtexture", "1" );
 #ifndef _X360
-static ConVar r_waterforceexpensive(		"r_waterforceexpensive", "0", FCVAR_ARCHIVE );
+static ConVar r_waterforceexpensive(		"r_waterforceexpensive", "1", FCVAR_ARCHIVE );
 #endif
 static ConVar r_waterforcereflectentities(	"r_waterforcereflectentities", "0", FCVAR_ALLOWED_IN_COMPETITIVE );
-static ConVar mat_motion_blur_enabled( "mat_motion_blur_enabled", "0", FCVAR_ARCHIVE );
+
+// Motion blur is removed entirely (see docs/graphics-mac.md): no ConVar,
+// m_bMotionBlur stays false, the dx<90 guard below no longer mentions it.
 
 
 uint32 g_nDebugVarsSignature = 0;
@@ -1896,7 +1898,7 @@ void CMaterialSystem::ReadConfigFromConVars( MaterialSystem_Config_t *pConfig )
 	pConfig->bShowSpecular = mat_fastspecular.GetInt() ? true : false;
 	pConfig->nFullbright = mat_fullbright.GetInt();
 	pConfig->m_bFastNoBump = mat_fastnobump.GetInt() != 0;
-	pConfig->m_bMotionBlur = mat_motion_blur_enabled.GetBool();
+	pConfig->m_bMotionBlur = false; // motion blur removed, never on
 	pConfig->m_bSupportFlashlight = mat_supportflashlight.GetInt() != 0;
 	pConfig->m_bShadowDepthTexture = r_flashlightdepthtexture.GetBool();
 
@@ -1915,7 +1917,6 @@ void CMaterialSystem::ReadConfigFromConVars( MaterialSystem_Config_t *pConfig )
 	{
 		mat_requires_rt_alloc_first.SetValue( 1 );
 		r_flashlightdepthtexture.SetValue( 0 );
-		mat_motion_blur_enabled.SetValue( 0 );
 		pConfig->m_bShadowDepthTexture = false;
 		pConfig->m_bMotionBlur = false;
 		pConfig->SetFlag( MATSYS_VIDCFG_FLAGS_ENABLE_HDR, false );
@@ -1996,7 +1997,6 @@ static const char *pConvarsAllowedInDXSupport[]={
 	"mat_dxlevel",
 	"mat_fallbackEyeRefract20",
 	"r_shader_srgb",
-	"mat_motion_blur_enabled",
 	"r_flashlightdepthtexture",
 	"mat_disablehwmorph",
 	"r_portal_stencil_depth",
@@ -2143,7 +2143,6 @@ void CMaterialSystem::WriteConfigIntoConVars( const MaterialSystem_Config_t &con
 	bool hdre = config.HDREnabled();
 	HardwareConfig()->SetHDREnabled( hdre );
 	r_flashlightdepthtexture.SetValue( config.m_bShadowDepthTexture ? 1 : 0 );
-	mat_motion_blur_enabled.SetValue( config.m_bMotionBlur ? 1 : 0 );
 	mat_supportflashlight.SetValue( config.m_bSupportFlashlight ? 1 : 0 );
 }
 

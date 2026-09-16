@@ -408,9 +408,8 @@ public:
 		m_pColorCorrection->AddItem("#gameui_disabled", NULL);
 		m_pColorCorrection->AddItem("#gameui_enabled", NULL);
 
-		m_pMotionBlur = new ComboBox( this, "MotionBlur", 2, false );
-		m_pMotionBlur->AddItem("#gameui_disabled", NULL);
-		m_pMotionBlur->AddItem("#gameui_enabled", NULL);
+		// Motion blur is removed entirely (see docs/graphics-mac.md): no cvar,
+		// no control. The .res MotionBlur combo + label are deleted too.
 
 		LoadControlSettings( "resource/OptionsSubVideoAdvancedDlg.res" );
 		MoveToCenterOfScreen();
@@ -419,7 +418,6 @@ public:
 		m_pDXLevel->SetEnabled(false);
 		
 		m_pColorCorrection->SetEnabled( mat_dxlevel.GetInt() >= 90 );
-		m_pMotionBlur->SetEnabled( mat_dxlevel.GetInt() >= 90 );
 		
 		if ( g_pCVar->FindVar( "fov_desired" ) == NULL )
 		{
@@ -534,21 +532,21 @@ public:
 
 		// Read individual values from keyvalues which came from dxsupport.cfg database
 		int nSkipLevels = pKeyValues->GetInt( "ConVar.mat_picmip", 0 );
-		int nAnisotropicLevel = pKeyValues->GetInt( "ConVar.mat_forceaniso", 1 );
-		int nForceTrilinear = pKeyValues->GetInt( "ConVar.mat_trilinear", 0 );
+		int nAnisotropicLevel = pKeyValues->GetInt( "ConVar.mat_forceaniso", 8 );
+		int nForceTrilinear = pKeyValues->GetInt( "ConVar.mat_trilinear", 1 );
 		int nAASamples = pKeyValues->GetInt( "ConVar.mat_antialias", 0 );
 		int nAAQuality = pKeyValues->GetInt( "ConVar.mat_aaquality", 0 );
-		int nRenderToTextureShadows = pKeyValues->GetInt( "ConVar.r_shadowrendertotexture", 0 );
-		int nShadowDepthTextureShadows = pKeyValues->GetInt( "ConVar.r_flashlightdepthtexture", 0 );
+		int nRenderToTextureShadows = pKeyValues->GetInt( "ConVar.r_shadowrendertotexture", 1 );
+		int nShadowDepthTextureShadows = pKeyValues->GetInt( "ConVar.r_flashlightdepthtexture", 1 );
 #ifndef _X360
-		int nWaterUseRealtimeReflection = pKeyValues->GetInt( "ConVar.r_waterforceexpensive", 0 );
+		int nWaterUseRealtimeReflection = pKeyValues->GetInt( "ConVar.r_waterforceexpensive", 1 );
 #endif
 		int nWaterUseEntityReflection = pKeyValues->GetInt( "ConVar.r_waterforcereflectentities", 0 );
 		int nMatVSync = pKeyValues->GetInt( "ConVar.mat_vsync", 1 );
 		int nRootLOD = pKeyValues->GetInt( "ConVar.r_rootlod", 0 );
 		int nReduceFillRate = pKeyValues->GetInt( "ConVar.mat_reducefillrate", 0 );
-		int nColorCorrection = pKeyValues->GetInt( "ConVar.mat_colorcorrection", 0 );
-		int nMotionBlur = pKeyValues->GetInt( "ConVar.mat_motion_blur_enabled", 0 );
+		int nColorCorrection = pKeyValues->GetInt( "ConVar.mat_colorcorrection", 1 );
+		// No motion-blur fallback: the feature is gone.
 		// It doesn't make sense to retrieve this convar from dxsupport, because we'll then have materialsystem setting this config at loadtime. (Also, it only has very minimal support for CPU related configuration.)
 		//int nMulticore = pKeyValues->GetInt( "ConVar.mat_queue_mode", 0 );
 		int nMulticore = GetCPUInformation()->m_nPhysicalProcessors >= 2;
@@ -635,8 +633,6 @@ public:
 		SetComboItemAsRecommended( m_pMulticore, nMulticore != 0 );
 
 		SetComboItemAsRecommended( m_pColorCorrection, nColorCorrection );
-
-		SetComboItemAsRecommended( m_pMotionBlur, nMotionBlur );
 
 		pKeyValues->deleteThis();
 	}
@@ -743,8 +739,6 @@ public:
 		ApplyChangesToConVar( "mat_queue_mode", (iMC == 0) ? 0 : -1 );	 
 
 		ApplyChangesToConVar( "mat_colorcorrection", m_pColorCorrection->GetActiveItem() );
-
-		ApplyChangesToConVar( "mat_motion_blur_enabled", m_pMotionBlur->GetActiveItem() );
 		
 		CCvarSlider *pFOV = (CCvarSlider *)FindChildByName( "FOVSlider" );
 		if ( pFOV ) 
@@ -771,7 +765,6 @@ public:
 		ConVarRef r_waterforcereflectentities( "r_waterforcereflectentities" );
 		ConVarRef mat_reducefillrate("mat_reducefillrate" );
 		ConVarRef mat_colorcorrection( "mat_colorcorrection" );
-		ConVarRef mat_motion_blur_enabled( "mat_motion_blur_enabled" );
 		ConVarRef r_shadowrendertotexture( "r_shadowrendertotexture" );
 
 		ResetDXLevelCombo();
@@ -861,8 +854,6 @@ public:
 
 		m_pColorCorrection->ActivateItem( mat_colorcorrection.GetInt() );
 
-		m_pMotionBlur->ActivateItem( mat_motion_blur_enabled.GetInt() );
-
 		// get current hardware dx support level
 		char dxVer[64];
 		GetNameForDXLevel( mat_dxlevel.GetInt(), dxVer, sizeof( dxVer ) );
@@ -941,7 +932,6 @@ private:
 	vgui::ComboBox *m_pModelDetail, *m_pTextureDetail, *m_pAntialiasingMode, *m_pFilteringMode;
 	vgui::ComboBox *m_pShadowDetail, *m_pWaterDetail, *m_pVSync, *m_pMulticore, *m_pShaderDetail;
 	vgui::ComboBox *m_pColorCorrection;
-	vgui::ComboBox *m_pMotionBlur;
 	vgui::ComboBox *m_pDXLevel;
 
 	int m_nNumAAModes;

@@ -131,10 +131,10 @@ static ConVar mat_monitorgamma_tv_enabled( "mat_monitorgamma_tv_enabled", "0", F
 				  
 ConVar r_drawbrushmodels( "r_drawbrushmodels", "1", FCVAR_CHEAT, "Render brush models. 0=Off, 1=Normal, 2=Wireframe" );
 
-ConVar r_shadowrendertotexture( "r_shadowrendertotexture", "0" );
+ConVar r_shadowrendertotexture( "r_shadowrendertotexture", "1" );
 ConVar r_flashlightdepthtexture( "r_flashlightdepthtexture", "1" );
 #ifndef _X360
-ConVar r_waterforceexpensive( "r_waterforceexpensive", "0", FCVAR_ARCHIVE );
+ConVar r_waterforceexpensive( "r_waterforceexpensive", "1", FCVAR_ARCHIVE );
 #endif
 ConVar r_waterforcereflectentities( "r_waterforcereflectentities", "0" );
 
@@ -441,19 +441,6 @@ static void ReadMaterialSystemConfigFromRegistry( MaterialSystem_Config_t &confi
 		if ( conVar.IsValid() )
 		{
 			conVar.SetValue( nValue );
-		}
-	}
-
-	nValue = ReadVideoConfigInt( "MotionBlur", -1 );
-	if ( nValue != -1 )
-	{
-		nValue = OverrideVideoConfigFromCommandLine( "mat_motion_blur_enabled", nValue );
-
-		ConVarRef conVar( "mat_motion_blur_enabled" );
-		if ( conVar.IsValid() )
-		{
-			conVar.SetValue( nValue );
-			config.m_bMotionBlur = ReadVideoConfigInt( "MotionBlur", 0 ) != 0;
 		}
 	}
 
@@ -825,7 +812,6 @@ void GetMaterialSystemConfigForBenchmarkUpload(KeyValues *dataToUpload)
 	dataToUpload->SetInt( "SkipMipLevels", g_pMaterialSystemConfig->skipMipLevels );
 	dataToUpload->SetInt( "DXLevel", g_pMaterialSystemConfig->dxSupportLevel );
 	dataToUpload->SetInt( "ShadowDepthTexture", g_pMaterialSystemConfig->ShadowDepthTexture() );
-	dataToUpload->SetInt( "MotionBlur", g_pMaterialSystemConfig->MotionBlur() );
 	dataToUpload->SetInt( "Windowed", (g_pMaterialSystemConfig->m_Flags & MATSYS_VIDCFG_FLAGS_WINDOWED) ? 1 : 0 );
 	dataToUpload->SetInt( "Trilinear", (g_pMaterialSystemConfig->m_Flags & MATSYS_VIDCFG_FLAGS_FORCE_TRILINEAR) ? 1 : 0 );
 	dataToUpload->SetInt( "ForceHWSync", (g_pMaterialSystemConfig->m_Flags & MATSYS_VIDCFG_FLAGS_FORCE_HWSYNC) ? 1 : 0 );
@@ -866,7 +852,6 @@ void PrintMaterialSystemConfig( const MaterialSystem_Config_t &config )
 	Warning( "MATSYS_VIDCFG_FLAGS_USE_Z_PREFILL: %s\n", ( config.m_Flags & MATSYS_VIDCFG_FLAGS_USE_Z_PREFILL ) ? "true" : "false" );
 	Warning( "MATSYS_VIDCFG_FLAGS_REDUCE_FILLRATE: %s\n", ( config.m_Flags & MATSYS_VIDCFG_FLAGS_REDUCE_FILLRATE ) ? "true" : "false" );
 	Warning( "r_shadowrendertotexture: %s\n", r_shadowrendertotexture.GetInt() ? "true" : "false" );
-	Warning( "motionblur: %s\n", config.m_bMotionBlur ? "true" : "false" );
 	Warning( "shadowdepthtexture: %s\n", config.m_bShadowDepthTexture ? "true" : "false" );
 #ifndef _X360
 	Warning( "r_waterforceexpensive: %s\n", r_waterforceexpensive.GetInt() ? "true" : "false" );

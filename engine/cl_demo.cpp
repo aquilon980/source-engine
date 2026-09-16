@@ -1787,7 +1787,6 @@ void CDemoPlayer::WriteTimeDemoResults( void )
 	ConVarRef mat_antialias( "mat_antialias" );
 	ConVarRef mat_forceaniso( "mat_forceaniso" );
 	ConVarRef r_waterforcereflectentities( "r_waterforcereflectentities" );
-	ConVarRef mat_motion_blur_enabled( "mat_motion_blur_enabled" );
 	ConVarRef r_flashlightdepthtexture( "r_flashlightdepthtexture" );
 	ConVarRef mat_reducefillrate( "mat_reducefillrate" );
 	ConVarRef mat_reduceparticles( "mat_reduceparticles" );
@@ -1816,7 +1815,6 @@ void CDemoPlayer::WriteTimeDemoResults( void )
 //	g_pFileSystem->FPrintf( fileHandle, "%s,", CommandLine()->CheckParm( "-nosound" ) ? "off" : "on" );
 	g_pFileSystem->FPrintf( fileHandle, "%s,", mat_reducefillrate.GetBool() ? "on" : "off" );
 	g_pFileSystem->FPrintf( fileHandle, "%s,", r_waterforcereflectentities.GetBool() ? "on" : "off" );
-	g_pFileSystem->FPrintf( fileHandle, "%s,", mat_motion_blur_enabled.GetBool() ? "on" : "off" );
 	g_pFileSystem->FPrintf( fileHandle, "%s,", r_flashlightdepthtexture.GetBool() ? "on" : "off" );
 	g_pFileSystem->FPrintf( fileHandle, "%s,", mat_reduceparticles.GetBool() ? "on" : "off" );
 	g_pFileSystem->FPrintf( fileHandle, "%s,", r_dopixelvisibility.GetBool() ? "on" : "off" );
