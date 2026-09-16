@@ -41,17 +41,19 @@ static Vector s_FadePlaneDirections[] =
 // This is used to randomize the direction it chooses to move a particle in.
 int g_OffsetLookup[3] = {-1,0,1};
 
-// Carve holes are widened by this factor inside the view-cone test, so the
-// neighbouring 80u puffs (which would otherwise overdraw the gap) are cleared
-// too — the difference between "thinner smoke" and "a hole you see through".
-#define SMOKE_HOLE_FATTEN	1.6f
+// Bullet holes stay small: the cone edge is not widened past the hole itself,
+// and only half the puff's half-size pads the test — enough that the card
+// covering the hole centre stays suppressed, without clearing two neighbours
+// each side and blowing the hole across the whole cloud.
+#define SMOKE_HOLE_FATTEN	1.0f
+#define SMOKE_HOLE_PUFF_SCALE	0.5f
 
 
 // CS2-style reactive smoke (see docs/smoke-reactive.md): bullets punch
 // short-lived tunnels, HE blasts clear a sphere that refills in place.
 // Client-only visuals — the server sim and bot radius are untouched.
 static ConVar smoke_reactive_enable( "smoke_reactive_enable", "1", FCVAR_ARCHIVE, "CS2-style smoke: bullets carve holes, HE blasts clear smoke that refills." );
-static ConVar smoke_bullet_radius( "smoke_bullet_radius", "60", FCVAR_ARCHIVE, "Radius around a bullet path that thins smoke.", true, 4.0f, true, 160.0f );
+static ConVar smoke_bullet_radius( "smoke_bullet_radius", "20", FCVAR_ARCHIVE, "Radius around a bullet path that thins smoke.", true, 4.0f, true, 160.0f );
 static ConVar smoke_bullet_strength( "smoke_bullet_strength", "1.0", FCVAR_ARCHIVE, "How much smoke one bullet clears (0-1).", true, 0.0f, true, 1.0f );
 static ConVar smoke_bullet_recover( "smoke_bullet_recover", "1.4", FCVAR_ARCHIVE, "Seconds for a bullet hole to refill.", true, 0.2f, true, 10.0f );
 static ConVar smoke_he_radius( "smoke_he_radius", "290", FCVAR_ARCHIVE, "Radius of the HE smoke clear.", true, 50.0f, true, 800.0f );
@@ -902,9 +904,10 @@ float C_ParticleSmokeGrenade::HoleSuppressAt( const Vector &vWorldPos, float flP
 		// Cap the cone (~35 deg half-angle): standing right at the hole must
 		// not blank the whole screen.
 		flHoleLat = MIN( flHoleLat, flAlong * 0.7f );
-		// Feed the puff's own half-size so a card still covering the hole
-		// centre stays suppressed — otherwise neighbours overdraw the gap.
-		flHoleLat += flPuffRadius;
+		// Pad with half the puff's half-size so the card covering the hole
+		// centre stays suppressed without clearing neighbours two-wide.
+		// Full padding was what ballooned single shots across the cloud.
+		flHoleLat += flPuffRadius * SMOKE_HOLE_PUFF_SCALE;
 		float flEdge = flHoleLat * SMOKE_HOLE_FATTEN;
 		if ( flLateral >= flEdge )
 			continue;
