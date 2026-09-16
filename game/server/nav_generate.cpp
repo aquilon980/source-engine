@@ -3482,19 +3482,11 @@ void CNavMesh::BeginAnalysis( bool quitWhenFinished )
 			engine->ServerCommand( "director_no_death_check 1\ndirector_stop\nnb_delete_all\n" );
 
 			ConVarRef mat_fullbright( "mat_fullbright" );
-			ConVarRef mat_hdr_level( "mat_hdr_level" );
 
 			if( mat_fullbright.GetBool() )
 			{
 				Warning( "Setting mat_fullbright 0\n" );
 				mat_fullbright.SetValue( 0 );
-			}
-
-			if ( mat_hdr_level.GetInt() < 2 )
-			{
-				Warning( "Enabling HDR and reloading materials\n" );
-				mat_hdr_level.SetValue( 2 );
-				engine->ClientCommand( host->edict(), "mat_reloadallmaterials\n" );
 			}
 
 			// Running a threaded server breaks our lighting calculations

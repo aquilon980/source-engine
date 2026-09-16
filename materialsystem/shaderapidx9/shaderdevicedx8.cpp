@@ -559,7 +559,6 @@ void CShaderDeviceMgrDx8::CheckVendorDependentAlphaToCoverage( HardwareCaps_t *p
 	}
 }
 
-ConVar mat_hdr_level( "mat_hdr_level", "2", FCVAR_ARCHIVE );
 ConVar mat_slopescaledepthbias_shadowmap( "mat_slopescaledepthbias_shadowmap", "16", FCVAR_CHEAT );
 #ifdef DX_TO_GL_ABSTRACTION
 ConVar mat_depthbias_shadowmap(	"mat_depthbias_shadowmap", "40", FCVAR_CHEAT );
@@ -933,24 +932,6 @@ bool CShaderDeviceMgrDx8::ComputeCapsFromD3D( HardwareCaps_t *pCaps, int nAdapte
 	// FIXME: How do I actually compute this?
 	pCaps->m_nMaxVertexTextureDimension = pCaps->m_bSupportsVertexTextures ? 4096 : 0;
 
-	// Does the device support filterable int16 textures?
-	bool bSupportsInteger16Textures = 		
-		( D3D()->CheckDeviceFormat( nAdapter, DX8_DEVTYPE,
-		D3DFMT_X8R8G8B8, D3DUSAGE_QUERY_FILTER,
-		D3DRTYPE_TEXTURE, D3DFMT_A16B16G16R16 ) == S_OK );
-
-	// Does the device support filterable fp16 textures?
-	bool bSupportsFloat16Textures = 		
-		( D3D()->CheckDeviceFormat( nAdapter, DX8_DEVTYPE,
-		D3DFMT_X8R8G8B8, D3DUSAGE_QUERY_FILTER,
-		D3DRTYPE_TEXTURE, D3DFMT_A16B16G16R16F ) == S_OK );
-
-	// Does the device support blendable fp16 render targets?
-	bool bSupportsFloat16RenderTargets = 		
-		( D3D()->CheckDeviceFormat( nAdapter, DX8_DEVTYPE,
-		D3DFMT_X8R8G8B8, D3DUSAGE_QUERY_POSTPIXELSHADER_BLENDING | D3DUSAGE_RENDERTARGET,
-		D3DRTYPE_TEXTURE, D3DFMT_A16B16G16R16F ) == S_OK );
-
 	// Essentially a proxy for a DX10 device running DX9 code path
 	pCaps->m_bSupportsFloat32RenderTargets = ( D3D()->CheckDeviceFormat( nAdapter, DX8_DEVTYPE,
 	D3DFMT_X8R8G8B8, D3DUSAGE_QUERY_POSTPIXELSHADER_BLENDING | D3DUSAGE_RENDERTARGET,
@@ -1048,48 +1029,10 @@ bool CShaderDeviceMgrDx8::ComputeCapsFromD3D( HardwareCaps_t *pCaps, int nAdapte
 	}
 
 
-#ifdef TOGLES
-	bSupportsInteger16Textures = caps.SupportInt16Format;
-#endif
-
-	// Do we have everything necessary to run with integer HDR?  Note that
-	// even if we don't support integer 16-bit/component textures, we
-	// can still run in this mode if fp16 textures are supported.
-	bool bSupportsIntegerHDR = pCaps->m_SupportsPixelShaders_2_0 &&
-		pCaps->m_SupportsVertexShaders_2_0 &&
-		//		(caps.Caps3 & D3DCAPS3_ALPHA_FULLSCREEN_FLIP_OR_DISCARD) &&
-		//		(caps.PrimitiveMiscCaps & D3DPMISCCAPS_SEPARATEALPHABLEND) &&
-		bSupportsInteger16Textures &&
-		pCaps->m_SupportsSRGB;
-
-	// Do we have everything necessary to run with float HDR?
-	bool bSupportsFloatHDR = pCaps->m_SupportsShaderModel_3_0 &&
-		//		(caps.Caps3 & D3DCAPS3_ALPHA_FULLSCREEN_FLIP_OR_DISCARD) &&
-		//		(caps.PrimitiveMiscCaps & D3DPMISCCAPS_SEPARATEALPHABLEND) &&
-		bSupportsFloat16Textures &&
-		bSupportsFloat16RenderTargets &&
-		pCaps->m_SupportsSRGB && 
-		!IsX360();
-
+	// HDR is removed entirely (see docs/hdr-off.md): never advertise or
+	// enable it, in any mode.
 	pCaps->m_MaxHDRType = HDR_TYPE_NONE;
-	if ( bSupportsFloatHDR )
-		pCaps->m_MaxHDRType = HDR_TYPE_FLOAT;
-	else
-		if ( bSupportsIntegerHDR )
-			pCaps->m_MaxHDRType = HDR_TYPE_INTEGER;
-
-	if ( bSupportsFloatHDR  && ( mat_hdr_level.GetInt() == 3 ) )
-	{
-		pCaps->m_HDRType = HDR_TYPE_FLOAT;
-	}
-	else if ( bSupportsIntegerHDR )
-	{
-		pCaps->m_HDRType = HDR_TYPE_INTEGER;
-	}
-	else
-	{
-		pCaps->m_HDRType = HDR_TYPE_NONE;
-	}
+	pCaps->m_HDRType = HDR_TYPE_NONE;
 
 	pCaps->m_bColorOnSecondStream = caps.MaxStreams > 1;
 

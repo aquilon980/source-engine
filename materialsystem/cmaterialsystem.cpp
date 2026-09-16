@@ -1963,7 +1963,6 @@ static const char *pConvarsAllowedInDXSupport[]={
 	"mat_forceaniso",
 	"mat_forcehardwaresync",
 	"mat_forcemanagedtextureintohardware",
-	"mat_hdr_level",
 	"mat_parallaxmap",
 	"mat_picmip",
 	"mat_reducefillrate",

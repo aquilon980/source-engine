@@ -335,11 +335,7 @@ void CReplayMovieManager::SetupHighQualityShadowDetail()
 
 void CReplayMovieManager::SetupHighQualityHDR()
 {
-	ConVarRef mat_dxlevel( "mat_dxlevel" );
-	if ( mat_dxlevel.GetInt() < 80 )
-		return;
-
-	g_pEngine->Cbuf_AddText( Replay_va( "mat_hdr_level %i\n", materials->SupportsHDRMode( HDR_TYPE_INTEGER ) ? 2 : 1 ) );
+	// HDR removed entirely (see docs/hdr-off.md) — nothing to set up.
 }
 
 void CReplayMovieManager::SetupHighQualityWaterDetail()

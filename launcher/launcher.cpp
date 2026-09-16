@@ -1267,10 +1267,9 @@ DLL_EXPORT int LauncherMain( int argc, char **argv )
 	CommandLine()->CreateCmdLine( argc, argv );
 #endif
 
-	// No -dxlevel or +mat_hdr_level allowed on POSIX
+	// No -dxlevel allowed on POSIX
 #ifdef POSIX	
 	CommandLine()->RemoveParm( "-dxlevel" );
-	CommandLine()->RemoveParm( "+mat_hdr_level" );
 	CommandLine()->RemoveParm( "+mat_dxlevel" );
 #endif
 
@@ -1522,7 +1521,6 @@ DLL_EXPORT int LauncherMain( int argc, char **argv )
 			CommandLine()->RemoveParm( "-fullscreen" );
 			CommandLine()->RemoveParm( "-dxlevel" );
 			CommandLine()->RemoveParm( "-autoconfig" );
-			CommandLine()->RemoveParm( "+mat_hdr_level" );
 		}
 	}
 

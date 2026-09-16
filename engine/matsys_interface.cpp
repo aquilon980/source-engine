@@ -157,47 +157,6 @@ static void NukeModeSwitchSaveGames( void )
 	}
 }
 
-void mat_hdr_level_Callback( IConVar *var, const char *pOldString, float flOldValue )
-{
-	if ( IsX360() )
-	{
-		// can't support, expected to be static
-		return;
-	}
-
-#ifdef CSS_PERF_TEST
-	ConVarRef hdr( var );
-	if ( hdr.GetInt() > 0 )
-		hdr.SetValue( 0 );
-	return;
-#endif
-	// Can do any reloading that is necessary here upon change.
-	// FIXME: should check if there is actually going to be a change here (ie. are we able to run in HDR
-	// given the current map and hardware.
-#ifndef SWDS
-	if ( g_pMaterialSystemHardwareConfig->GetHardwareHDRType() != HDR_TYPE_NONE &&
-         saverestore->IsValidSave() &&
-		 modelloader->LastLoadedMapHasHDRLighting() &&
-		 sv.GetMaxClients() == 1 &&
-		 !sv.IsLevelMainMenuBackground()
-		 )
-	{
-		NukeModeSwitchSaveGames();
-		Cbuf_AddText( "save modeswitchsave;wait;load modeswitchsave\n" );
-	}
-#endif
-}
-
-#ifdef CSS_PERF_TEST
-ConVar mat_hdr_level( "mat_hdr_level", "0", 0, 
-					 "Set to 0 for no HDR, 1 for LDR+bloom on HDR maps, and 2 for full HDR on HDR maps.",
-					 mat_hdr_level_Callback );
-#else
-ConVar mat_hdr_level( "mat_hdr_level", "2", FCVAR_ARCHIVE, 
-					  "Set to 0 for no HDR, 1 for LDR+bloom on HDR maps, and 2 for full HDR on HDR maps.",
-					  mat_hdr_level_Callback );
-#endif
-
 MaterialSystem_SortInfo_t *materialSortInfoArray = 0;
 static bool s_bConfigLightingChanged = false;
 
@@ -241,7 +200,6 @@ static const char *s_pRegistryConVars[] =
 	"mat_aaquality",
 	"mat_specular",
 	"mat_bumpmap",
-	"mat_hdr_level",
 	"mat_colorcorrection",
 
 	// NOTE: Empty string must always be last!

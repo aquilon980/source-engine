@@ -25,7 +25,6 @@ extern	ConVar	mat_bumpbasis;		// Draw the world with the bump basis vectors draw
 extern	ConVar	mat_envmapsize;		// Dimensions of square skybox bitmap (in 3D screen shots, not game textures)
 extern  ConVar  mat_envmaptgasize;
 extern  ConVar  mat_levelflush;
-extern	ConVar	mat_hdr_level;
 
 static inline bool CanCheat()
 {

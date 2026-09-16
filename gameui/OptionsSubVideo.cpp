@@ -384,22 +384,8 @@ public:
 
 		ConVarRef mat_dxlevel( "mat_dxlevel" );
 
-		m_pHDR = new ComboBox( this, "HDR", 6, false );
-		m_pHDR->AddItem("#GameUI_hdr_level0", NULL);
-		m_pHDR->AddItem("#GameUI_hdr_level1", NULL);
-
-		if ( materials->SupportsHDRMode( HDR_TYPE_INTEGER ) )
-		{
-			m_pHDR->AddItem("#GameUI_hdr_level2", NULL);
-		}
-#if 0
-		if ( materials->SupportsHDRMode( HDR_TYPE_FLOAT ) )
-		{
-			m_pHDR->AddItem("#GameUI_hdr_level3", NULL);
-		}
-#endif
-
-		m_pHDR->SetEnabled( mat_dxlevel.GetInt() >= 80 );
+		// HDR is removed entirely (see docs/hdr-off.md): the cvar is deleted
+		// at the source and there is no UI control. Nothing to configure here.
 
 		m_pWaterDetail = new ComboBox( this, "WaterDetail", 6, false );
 		m_pWaterDetail->AddItem("#gameui_noreflections", NULL);
@@ -532,14 +518,6 @@ public:
 				break;
 			}
 		}
-
-		// Reset HDR too
-		if ( m_pHDR->IsEnabled() )
-		{
-			ConVarRef mat_hdr_level("mat_hdr_level");
-			Assert( mat_hdr_level.IsValid() );
-			m_pHDR->ActivateItem( clamp( mat_hdr_level.GetInt(), 0, 2 ) );
-		}
 	}
 
 	MESSAGE_FUNC( OK_Confirmed, "OK_Confirmed" )
@@ -569,7 +547,6 @@ public:
 		int nMatVSync = pKeyValues->GetInt( "ConVar.mat_vsync", 1 );
 		int nRootLOD = pKeyValues->GetInt( "ConVar.r_rootlod", 0 );
 		int nReduceFillRate = pKeyValues->GetInt( "ConVar.mat_reducefillrate", 0 );
-		int nDXLevel = pKeyValues->GetInt( "ConVar.mat_dxlevel", 0 );
 		int nColorCorrection = pKeyValues->GetInt( "ConVar.mat_colorcorrection", 0 );
 		int nMotionBlur = pKeyValues->GetInt( "ConVar.mat_motion_blur_enabled", 0 );
 		// It doesn't make sense to retrieve this convar from dxsupport, because we'll then have materialsystem setting this config at loadtime. (Also, it only has very minimal support for CPU related configuration.)
@@ -657,8 +634,6 @@ public:
 
 		SetComboItemAsRecommended( m_pMulticore, nMulticore != 0 );
 
-		SetComboItemAsRecommended( m_pHDR, nDXLevel >= 90 ? 2 : 0 );
-
 		SetComboItemAsRecommended( m_pColorCorrection, nColorCorrection );
 
 		SetComboItemAsRecommended( m_pMotionBlur, nMotionBlur );
@@ -720,13 +695,6 @@ public:
 		int nActiveAAItem = m_pAntialiasingMode->GetActiveItem();
 		ApplyChangesToConVar( "mat_antialias", m_nAAModes[nActiveAAItem].m_nNumSamples );
 		ApplyChangesToConVar( "mat_aaquality", m_nAAModes[nActiveAAItem].m_nQualityLevel );
-
-		if( m_pHDR->IsEnabled() )
-		{
-			ConVarRef mat_hdr_level("mat_hdr_level");
-			Assert( mat_hdr_level.IsValid() );
-			mat_hdr_level.SetValue(m_pHDR->GetActiveItem());
-		}
 
 		if ( m_pShadowDetail->GetActiveItem() == 0 )						// Blobby shadows
 		{
@@ -802,7 +770,6 @@ public:
 #endif
 		ConVarRef r_waterforcereflectentities( "r_waterforcereflectentities" );
 		ConVarRef mat_reducefillrate("mat_reducefillrate" );
-		ConVarRef mat_hdr_level( "mat_hdr_level" );
 		ConVarRef mat_colorcorrection( "mat_colorcorrection" );
 		ConVarRef mat_motion_blur_enabled( "mat_motion_blur_enabled" );
 		ConVarRef r_shadowrendertotexture( "r_shadowrendertotexture" );
@@ -827,7 +794,6 @@ public:
 		}
 
 		m_pShaderDetail->ActivateItem( mat_reducefillrate.GetBool() ? 0 : 1 );
-		m_pHDR->ActivateItem(clamp(mat_hdr_level.GetInt(), 0, 2));
 
 		switch (mat_forceaniso.GetInt())
 		{
@@ -966,15 +932,6 @@ public:
 			{
 				return true;
 			}
-
-			// HDR changed?
-			if ( m_pHDR->IsEnabled() )
-			{
-				ConVarRef mat_hdr_level("mat_hdr_level");
-				Assert( mat_hdr_level.IsValid() );
-				if ( mat_hdr_level.GetInt() != m_pHDR->GetActiveItem() )
-					return true;
-			}
 		}
 		return false;
 	}
@@ -982,7 +939,7 @@ public:
 private:
 	bool m_bUseChanges;
 	vgui::ComboBox *m_pModelDetail, *m_pTextureDetail, *m_pAntialiasingMode, *m_pFilteringMode;
-	vgui::ComboBox *m_pShadowDetail, *m_pHDR, *m_pWaterDetail, *m_pVSync, *m_pMulticore, *m_pShaderDetail;
+	vgui::ComboBox *m_pShadowDetail, *m_pWaterDetail, *m_pVSync, *m_pMulticore, *m_pShaderDetail;
 	vgui::ComboBox *m_pColorCorrection;
 	vgui::ComboBox *m_pMotionBlur;
 	vgui::ComboBox *m_pDXLevel;

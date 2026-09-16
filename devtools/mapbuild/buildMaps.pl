@@ -233,12 +233,12 @@ for ( @finalizeList )
 
 		if ( $vradargs =~ /-hdr|-both/ )
 		{
-			$hdrResult = system( "$rootdir\\$maindir\\game\\hl2.exe -allowdebug -game $mod -window -w 1152 -h 864 +mat_picmip 0 -dev +mat_hdr_level 2 +sv_cheats 1 +map $mapname -buildcubemaps" );
+			$hdrResult = system( "$rootdir\\$maindir\\game\\hl2.exe -allowdebug -game $mod -window -w 1152 -h 864 +mat_picmip 0 -dev +sv_cheats 1 +map $mapname -buildcubemaps" );
 		}
 
 		if ( $vradargs =~ /-ldr|-both/ )
 		{
-			$ldrResult = system( "$rootdir\\$maindir\\game\\hl2.exe -allowdebug -game $mod -window -w 1152 -h 864 +mat_picmip 0 -dev +mat_hdr_level 0 +sv_cheats 1 +map $mapname -buildcubemaps" );
+			$ldrResult = system( "$rootdir\\$maindir\\game\\hl2.exe -allowdebug -game $mod -window -w 1152 -h 864 +mat_picmip 0 -dev +sv_cheats 1 +map $mapname -buildcubemaps" );
 		}
 	}
 
