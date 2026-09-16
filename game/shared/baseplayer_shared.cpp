@@ -832,7 +832,7 @@ Vector CBasePlayer::Weapon_ShootPosition( )
 //-----------------------------------------------------------------------------
 #if defined( CSTRIKE_DLL )
 
-ConVar cl_freeaim( "cl_freeaim", "1", FCVAR_ARCHIVE,
+ConVar cl_freeaim( "cl_freeaim", "0", FCVAR_ARCHIVE,
 	"1 = weapon aims independently of the view (tactical free aim), 0 = stock CS:S." );
 ConVar cl_freeaim_cone_yaw( "cl_freeaim_cone_yaw", "8", FCVAR_ARCHIVE,
 	"Max horizontal angle (degrees) the weapon may lead the camera in free aim." );
