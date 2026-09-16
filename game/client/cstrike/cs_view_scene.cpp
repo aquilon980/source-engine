@@ -35,10 +35,12 @@
 #include "c_cs_player.h"
 #include "cs_gamerules.h"
 #include "shake.h"
+#include "smoke_fog_overlay.h"
 #include "clienteffectprecachesystem.h"
 #include <vgui/ISurface.h>
 
 CLIENTEFFECT_REGISTER_BEGIN( PrecacheCSViewScene )
+CLIENTEFFECT_MATERIAL( "effects/overlaysmoke" )
 CLIENTEFFECT_MATERIAL( "effects/flashbang" )
 CLIENTEFFECT_MATERIAL( "effects/flashbang_white" )
 CLIENTEFFECT_MATERIAL( "effects/nightvision" )
@@ -50,6 +52,7 @@ CCSViewRender::CCSViewRender()
 {
 	view = ( IViewRender * )&g_ViewRender;
 	m_pFlashTexture = NULL;
+	m_flSmokeOverlayAmount = 0.0f;
 }
 
 struct ConVarFlags
@@ -291,6 +294,58 @@ void CCSViewRender::PerformFlashbangEffect( const CViewSetup &view )
 	}
 
 	overlaycolor[0] = overlaycolor[1] = overlaycolor[2] = flAlpha;
+	render->ViewDrawFade( overlaycolor, pMaterial );
+}
+
+
+//-----------------------------------------------------------------------------
+// Purpose: CS:GO-style inside-smoke screen overlay, drawn twice (around the
+// viewmodel) so the gun stays readable while the world whites out.
+// Driven by g_SmokeFogOverlayAlpha, which the particle smoke already sets in
+// a carve-aware way — looking through a bullet/HE hole clears this too.
+//-----------------------------------------------------------------------------
+ConVar smoke_overlay_enable( "smoke_overlay_enable", "1", FCVAR_ARCHIVE, "CS:GO-style inside-smoke overlay (two-pass, gun stays readable). 0 = stock single-pass fog." );
+
+void CCSViewRender::RenderSmokeOverlay( bool bPreViewModel )
+{
+	if ( !smoke_overlay_enable.GetBool() )
+	{
+		// Stock behavior: one milky pass after the viewmodel.
+		if ( !bPreViewModel )
+			DrawSmokeFogOverlay();
+		return;
+	}
+
+	// Fast attack, slow release — stepping out of the smoke fades instead of popping.
+	float flTarget = clamp( g_SmokeFogOverlayAlpha, 0.0f, 1.0f );
+	if ( flTarget < m_flSmokeOverlayAmount )
+	{
+		flTarget = Approach( flTarget, m_flSmokeOverlayAmount, gpGlobals->frametime * 4.5f );
+	}
+	m_flSmokeOverlayAmount = flTarget;
+
+	if ( m_flSmokeOverlayAmount <= 0.0f )
+		return;
+
+	// CS:GO's textured overlay when the material is around (CSSO pack), else
+	// the stock fog card tinted milky to match our brighter smoke.
+	IMaterial *pMaterial = materials->FindMaterial( "effects/overlaysmoke", TEXTURE_GROUP_CLIENT_EFFECTS, true );
+	byte overlaycolor[4];
+	if ( pMaterial && !pMaterial->IsErrorMaterial() )
+	{
+		overlaycolor[0] = overlaycolor[1] = overlaycolor[2] = 90;
+	}
+	else
+	{
+		pMaterial = materials->FindMaterial( "particle/screenspace_fog", TEXTURE_GROUP_CLIENT_EFFECTS, true );
+		if ( !pMaterial )
+			return;
+		overlaycolor[0] = overlaycolor[1] = 184; // milky 0.72 to match the volumetric puffs
+		overlaycolor[2] = 191;
+	}
+
+	// Post-viewmodel pass is half strength so the gun reads through the smoke.
+	overlaycolor[3] = (byte)( m_flSmokeOverlayAmount * ( bPreViewModel ? 255 : 128 ) );
 	render->ViewDrawFade( overlaycolor, pMaterial );
 }
 

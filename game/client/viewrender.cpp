@@ -2037,8 +2037,10 @@ void CViewRender::RenderView( const CViewSetup &view, int nClearFlags, int whatT
 
 		GetClientModeNormal()->DoPostScreenSpaceEffects( &view );
 
+		RenderSmokeOverlay( true );
 		// Now actually draw the viewmodel
 		DrawViewModels( view, whatToDraw & RENDERVIEW_DRAWVIEWMODEL );
+		RenderSmokeOverlay( false );
 
 		DrawUnderwaterOverlay();
 
@@ -2049,8 +2051,13 @@ void CViewRender::RenderView( const CViewSetup &view, int nClearFlags, int whatT
 		bool blend;
 		vieweffects->GetFadeParams( &color[0], &color[1], &color[2], &color[3], &blend );
 
+#ifdef CSTRIKE_DLL
+		// CS draws its inside-smoke overlay in RenderSmokeOverlay (two-pass around
+		// the viewmodel, with the stock single-pass as fallback) — skip the old one.
+#else
 		// Draw an overlay to make it even harder to see inside smoke particle systems.
 		DrawSmokeFogOverlay();
+#endif
 
 		// Overlay screen fade on entire screen
 		IMaterial* pMaterial = blend ? m_ModulateSingleColor : m_TranslucentSingleColor;
