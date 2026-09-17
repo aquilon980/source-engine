@@ -1680,6 +1680,9 @@ bool CWeaponCSBase::IsUseable()
 	static ConVar	cl_bobamt_vert( "cl_bobamt_vert", "0.25", FCVAR_ARCHIVE, "The amount the viewmodel moves up and down when running", true, 0.1, true, 2 );
 	static ConVar	cl_bobamt_lat( "cl_bobamt_lat", "0.4", FCVAR_ARCHIVE, "The amount the viewmodel moves side to side when running", true, 0.1, true, 2 );
 	static ConVar	cl_bob_lower_amt( "cl_bob_lower_amt", "21", FCVAR_ARCHIVE, "The amount the viewmodel lowers when running", true, 5, true, 30 );
+	// Slight roll of the viewmodel into a strafe (velocity-based, see below).
+	// Negative flips which way it leans.
+	static ConVar	cl_viewmodel_strafe_tilt( "cl_viewmodel_strafe_tilt", "1.5", FCVAR_ARCHIVE, "Degrees the viewmodel leans into a full-speed strafe (negative flips the lean)", true, -8.0f, true, 8.0f );
 
 	//-----------------------------------------------------------------------------
 	// CSO-style viewmodel bob helpers, ported from FJH03/CSSO-NOOFFICIAL-MP
@@ -1705,7 +1708,8 @@ bool CWeaponCSBase::IsUseable()
 		}
 
 		//Find the speed of the player
-		float speed = player->GetLocalVelocity().Length2D();
+		Vector vVel = player->GetLocalVelocity();
+		float speed = vVel.Length2D();
 
 		float flmaxSpeedDelta = MAX( 0, (gpGlobals->curtime - pBobState->m_flLastBobTime) * 640.0f );
 
@@ -1888,6 +1892,20 @@ bool CWeaponCSBase::IsUseable()
 
 		pBobState->m_flLateralBob = clamp( pBobState->m_flLateralBob, -8.0f, 8.0f );
 
+		// Slight roll into a strafe: the gun leans the way you sidestep.
+		// Velocity-based, not key-based, so it blends through every movement
+		// state - forward+strafe, direction changes, stopping, being pushed -
+		// instead of snapping when an input flips. Eased exponentially with a
+		// ~0.1s time constant (framerate-independent via dt), so it lags the
+		// movement a touch and never pops. Sign matches the engine's own
+		// strafe-roll (CBasePlayer::CalcRoll), so it leans the same way the
+		// camera would if sv_rollangle were on.
+		Vector vViewFwd, vViewRight;
+		AngleVectors( player->EyeAngles(), &vViewFwd, &vViewRight, NULL );
+		float flStrafe = clamp( DotProduct( vVel, vViewRight ) / 250.0f, -1.0f, 1.0f );
+		float flStrafeTiltTarget = flStrafe * cl_viewmodel_strafe_tilt.GetFloat();
+		pBobState->m_flStrafeTilt = Lerp( clamp( flDt * 10.0f, 0.0f, 1.0f ), flStrafeTiltTarget, pBobState->m_flStrafeTilt );
+
 		//NOTENOTE: We don't use this return value in our case (need to restructure the calculation function setup!)
 		return 0.0f;
 	}
@@ -1914,6 +1932,9 @@ bool CWeaponCSBase::IsUseable()
 		angles[ROLL] += pBobState->m_flVerticalBob * 0.5f;
 		angles[PITCH] -= pBobState->m_flVerticalBob * 0.4f;
 		angles[YAW] -= pBobState->m_flLateralBob  * 0.3f;
+
+		// Strafe tilt: a slight roll into the direction you're sidestepping.
+		angles[ROLL] += pBobState->m_flStrafeTilt;
 
 		VectorMA( origin, pBobState->m_flLateralBob * 0.2f, right, origin );
 	}

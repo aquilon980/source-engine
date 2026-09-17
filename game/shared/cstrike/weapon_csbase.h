@@ -98,6 +98,7 @@ struct BobState_t
 		m_flLockError = 0.0f;
 		m_flLastFootfallTime = 0.0f;
 		m_flBobGroundBlend = 1.0f;
+		m_flStrafeTilt = 0.0f;
 	}
 
 	float m_flBobTime;
@@ -120,6 +121,9 @@ struct BobState_t
 	float m_flLockError;
 	float m_flLastFootfallTime;
 	float m_flBobGroundBlend;
+	// Smoothed roll (degrees) the viewmodel leans with a strafe. Velocity-
+	// based and eased every frame, so it blends through every movement state.
+	float m_flStrafeTilt;
 };
 
 float CalcViewModelBobHelper( CBasePlayer *player, BobState_t *pBobState, float flMaxSpeed );
