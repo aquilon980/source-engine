@@ -1219,18 +1219,13 @@ const ConCommandBase *Cmd_ExecuteCommand( const CCommand &command, cmd_source_t 
 	if ( cv->IsCommand( command ) )
 		return pCommand;
 
-	// forward the command line to the server, so the entity DLL can parse it
-	if ( cmd_source == src_command )
-	{
-		if ( cl.IsConnected() )
-		{
-			Cmd_ForwardToServer( command );
-			return NULL;
-		}
-	}
-
 	// Exact miss: try the fuzzy matcher (ignores spaces/underscores/junk,
 	// splits off attached arguments). Exact input always wins over this.
+	// This MUST run before the forward-to-server fallback: when connected,
+	// every unrecognized line is forwarded verbatim, and the game DLL then
+	// answers "Unknown command: <typo>" itself -- the correction never runs.
+	// The fuzzy hit re-enters here with the fixed name, so a client cvar is
+	// set locally while a server command falls through to the forward below.
 	bool bAmbiguous = false;
 	const ConCommandBase *pFuzzy = Cmd_TryFuzzyCommand( command, src, nClientSlot, bAmbiguous );
 	if ( pFuzzy )
@@ -1239,6 +1234,16 @@ const ConCommandBase *Cmd_ExecuteCommand( const CCommand &command, cmd_source_t 
 	{
 		Msg( "Ambiguous command \"%s\" (matches more than one command)\n", command[0] );
 		return NULL;
+	}
+
+	// forward the command line to the server, so the entity DLL can parse it
+	if ( cmd_source == src_command )
+	{
+		if ( cl.IsConnected() )
+		{
+			Cmd_ForwardToServer( command );
+			return NULL;
+		}
 	}
 	
 	Msg( "Unknown command \"%s\"\n", command[0] );
