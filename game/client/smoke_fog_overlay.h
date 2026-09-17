@@ -27,11 +27,13 @@
 #define SMOKEPARTICLE_OVERLAP		44
 
 #define SMOKEPARTICLE_SIZE			46
-#define NUM_MATERIAL_HANDLES		2
+#define NUM_MATERIAL_HANDLES		16
 
 // Volumetric smoke (see docs/smoke-volumetric.md): the cloud is wider than
 // it is tall and sits on the ground, CS2-style, instead of a floating cube.
-#define SMOKE_CLOUD_HEIGHT_SCALE	0.72
+// CS2/CS:GO smokes are rounder than CS:S's squat column, so keep the dome
+// close to the width instead of flattening it.
+#define SMOKE_CLOUD_HEIGHT_SCALE	0.85
 
 
 void InitSmokeFogOverlay();

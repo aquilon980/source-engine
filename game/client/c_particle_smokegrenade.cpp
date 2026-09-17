@@ -65,8 +65,9 @@ static ConVar smoke_he_recover( "smoke_he_recover", "3.0", FCVAR_ARCHIVE, "Secon
 // patchily instead of shrinking as a ball. Client-only visuals.
 static ConVar smoke_mold_enable( "smoke_mold_enable", "1", FCVAR_ARCHIVE, "Smoke molds to the ground/walls instead of clipping through them." );
 static ConVar smoke_bloom_time( "smoke_bloom_time", "1.4", FCVAR_ARCHIVE, "Seconds for the smoke cloud to bloom to full size.", true, 0.5f, true, 3.0f );
-static ConVar smoke_core( "smoke_core", "0.45", FCVAR_ARCHIVE, "Fraction of the cloud that stays fully dense (soft edge outside it).", true, 0.2f, true, 0.8f );
+static ConVar smoke_core( "smoke_core", "0.50", FCVAR_ARCHIVE, "Fraction of the cloud that stays fully dense (soft edge outside it).", true, 0.2f, true, 0.8f );
 static ConVar smoke_brightness( "smoke_brightness", "1.0", FCVAR_ARCHIVE, "Smoke puff brightness multiplier.", true, 0.4f, true, 1.6f );
+static ConVar smoke_scale( "smoke_scale", "1.0", FCVAR_ARCHIVE, "Smoke cloud size multiplier at detonation (0.6-1.4).", true, 0.6f, true, 1.4f );
 static ConVar smoke_debug( "smoke_debug", "0", FCVAR_NONE, "Print smoke carve diagnostics to the console." );
 
 // Same pattern as c_func_smokevolume/c_smokestack: low-end lever that halves
@@ -95,6 +96,7 @@ private:
 		float				m_CurRotation;
 		float				m_FadeAlpha;		// Set as it moves around.
 		float				m_flSize;			// Base puff size (bloom + fade scale it).
+		float				m_flDensity;		// Per-puff opacity jitter (breaks the shell).
 		unsigned char		m_ColorInterp;		// Amount between min and max colors.
 		unsigned char		m_Color[4];
 	};
@@ -467,14 +469,18 @@ void C_ParticleSmokeGrenade::Start(CParticleMgr *pParticleMgr, IPrototypeArgAcce
 
 	m_SmokeTrail.SetLocalOrigin( GetAbsOrigin() );
 
-	// Stock soft-smoke cards (UnlitGeneric) — the only thing the old quad
-	// emitter can feed correctly. SpriteCard materials need TEXCOORD1-4
-	// (radius/rotation/corner IDs) that RenderParticle_ColorSizeAngle never
-	// writes, so they collapse to degenerate quads here. Wall/floor blending
-	// comes from the CPU-side mold + edge fade below, not the material.
-	// Two densities for a little texture variety across the cloud.
-	m_MaterialHandles[0] = m_ParticleEffect.FindOrAddMaterial("particle/particle_smokegrenade1");
-	m_MaterialHandles[1] = m_ParticleEffect.FindOrAddMaterial("particle/particle_smokegrenade");
+	// CS:GO smoke sprites (particle/smokesprites_0001..0016) — soft, wispy,
+	// irregular puffs the stock quad emitter can feed (plain UnlitGeneric
+	// with $vertexcolor/$vertexalpha, no TEXCOORD1-4 like SpriteCard). Using
+	// all 16 at random makes the cloud read as billowed smoke instead of a
+	// union of identical CS:S blobs with a hard circular outline. They ship
+	// in the stock cstrike VPK, so this works on any install.
+	for ( int i = 0; i < NUM_MATERIAL_HANDLES; i++ )
+	{
+		char str[64];
+		Q_snprintf( str, sizeof( str ), "particle/smokesprites_%04d", i + 1 );
+		m_MaterialHandles[i] = m_ParticleEffect.FindOrAddMaterial( str );
+	}
 
 	if( m_CurrentStage == 2 )
 	{
@@ -932,6 +938,14 @@ void C_ParticleSmokeGrenade::RenderParticles( CParticleRenderIterator *pIterator
 	// Hoisted: ConVar reads don't belong in the per-puff loop.
 	float flCutoff = clamp( smoke_core.GetFloat(), 0.2f, 0.8f );
 	float flBright = smoke_brightness.GetFloat();
+	float flCloudRadius = MAX( 1.0f, m_SpacingRadius * 2.0f );
+
+	// The cloud is lifted to sit on the ground, so the bloom has to radiate
+	// from the detonation point itself, not from that lifted centre —
+	// otherwise the smoke materialises in mid-air as a ball and swells,
+	// instead of growing up and out of the ground where it landed.
+	Vector vBloomOrigin = m_SmokeBasePos - m_vecBaseLift;
+	float flRevealBand = MAX( 1.0f, m_SpacingRadius * 0.5f );
 
 	while ( pParticle )
 	{
@@ -943,12 +957,26 @@ void C_ParticleSmokeGrenade::RenderParticles( CParticleRenderIterator *pIterator
 		// on all axes instead of ending in a dense flat top. The falloff
 		// is anchored below center (~55% of the half-height) so the dense
 		// core sits at head height over the dirt — a centered ball reads
-		// as hovering and leaves the ground wispy.
+		// as hovering and leaves the ground wispy. This describes the final
+		// cloud *shape*, so it's measured against the full radius, not the
+		// growing bloom radius.
 		Vector vEll = pParticle->m_Pos;
 		vEll.z /= MAX( 0.3f, m_flHeightScale );
 		vEll.z += m_SpacingRadius * m_flHeightScale * 0.55f;
 		float len = vEll.Length();
-		if ( len > m_ExpandRadius )
+
+		// Bloom reveal: a wavefront radiating from the detonation point. The
+		// puffs keep their true molded positions and only their alpha ramps
+		// as the front passes, so the volume fills outward from the ground
+		// instead of popping into a ball around the lifted centre. The short
+		// band is the soft edge of the front — puffs don't snap on as it
+		// crosses them.
+		float flRevealDist = ( vWorldSpacePos - vBloomOrigin ).Length();
+		float flRevealReach = ( flCloudRadius * 1.15f ) * m_flBloomEase;
+		float flReveal = clamp( ( flRevealReach - flRevealDist ) / flRevealBand, 0.0f, 1.0f );
+		flReveal = flReveal * flReveal * ( 3.0f - 2.0f * flReveal );
+
+		if ( flReveal <= 0.0f )
 		{
 			Vector vTemp;
 			TransformParticle(ParticleMgr()->GetModelView(), vWorldSpacePos, vTemp);
@@ -956,20 +984,11 @@ void C_ParticleSmokeGrenade::RenderParticles( CParticleRenderIterator *pIterator
 		}
 		else
 		{
-			// This smooths out the growing sphere. Rather than having particles appear in one spot as the sphere
-			// expands, they stay at the borders.
-			Vector renderPos;
-			if(len > m_ExpandRadius * 0.5f)
-			{
-				renderPos = m_SmokeBasePos + (pParticle->m_Pos * (m_ExpandRadius * 0.5f)) / len;
-			}
-			else
-			{
-				renderPos = vWorldSpacePos;
-			}		
+			// Puffs stay where they molded — no pull toward a growing ball.
+			Vector renderPos = vWorldSpacePos;
 
-			// Figure out the alpha based on where it is in the sphere.
-			float alpha = 1 - len / m_ExpandRadius;
+			// Figure out the alpha based on where it is in the cloud.
+			float alpha = MAX( 0.0f, 1 - len / flCloudRadius );
 			
 			// Dense volumetric core that feathers out softly. The core
 			// fraction is tunable live (smoke_core).
@@ -997,6 +1016,12 @@ void C_ParticleSmokeGrenade::RenderParticles( CParticleRenderIterator *pIterator
 
 			// Apply the precalculated fade alpha from world geometry.
 			alpha *= pParticle->m_FadeAlpha;
+
+			// Bloom front edge: a puff eases in as the wavefront reaches it.
+			alpha *= flReveal;
+
+			// Per-puff density variation so the outer shell isn't uniform.
+			alpha *= pParticle->m_flDensity;
 
 			// Puff size drives the carve test too: a card's drawn extent
 			// covers the hole even when its centre is outside it, so the
@@ -1122,10 +1147,13 @@ void C_ParticleSmokeGrenade::FillVolume()
 	m_nCarveHoles = 0;
 
 	// Spawn all of our particles. Denser than stock (6x6x6 = 216 puffs) at
-	// roughly the same world size, so the cloud reads as one volume.
+	// roughly the same world size, so the cloud reads as one volume. The
+	// whole cloud (spread + puff size) scales with smoke_scale, so density
+	// is preserved when the size is dialed.
 	float overlap = SMOKEPARTICLE_OVERLAP;
+	float flScale = smoke_scale.GetFloat();
 
-	m_SpacingRadius = (SMOKEGRENADE_PARTICLERADIUS - overlap) * NUM_PARTICLES_PER_DIMENSION * 0.5f;
+	m_SpacingRadius = (SMOKEGRENADE_PARTICLERADIUS - overlap) * NUM_PARTICLES_PER_DIMENSION * 0.5f * flScale;
 	m_xCount = m_yCount = m_zCount = NUM_PARTICLES_PER_DIMENSION;
 	m_flHeightScale = smoke_mold_enable.GetBool() ? SMOKE_CLOUD_HEIGHT_SCALE : 1.0f;
 
@@ -1261,6 +1289,26 @@ void C_ParticleSmokeGrenade::FillVolume()
 							vMolded.z = flMinZ;
 					}
 
+					// Billow, don't voxel: nudge each puff a little so the
+					// union of wispy cards reads as cloud, not a regular
+					// lattice with a clean geometric silhouette. The mold
+					// still wins — jitter never pushes a card through the
+					// floor or into a wall.
+					{
+						Vector vClean = vMolded;
+						vMolded.x += FRand( -14.0f, 14.0f ) * flScale;
+						vMolded.y += FRand( -14.0f, 14.0f ) * flScale;
+						vMolded.z += FRand( -10.0f, 10.0f ) * flScale;
+						if ( bMold )
+						{
+							float flMinZJit = flColGround[x][y] - 12.0f;
+							if ( vMolded.z < flMinZJit )
+								vMolded.z = flMinZJit;
+							if ( GetWorldPointContents( vMolded ) & CONTENTS_SOLID )
+								vMolded = vClean;
+						}
+					}
+
 					{
 						SmokeGrenadeParticle *pParticle = 
 							(SmokeGrenadeParticle*)m_ParticleEffect.AddParticle(sizeof(SmokeGrenadeParticle), m_MaterialHandles[rand() % NUM_MATERIAL_HANDLES]);
@@ -1271,7 +1319,8 @@ void C_ParticleSmokeGrenade::FillVolume()
 							pParticle->m_ColorInterp = (unsigned char)((rand() * 255) / VALVE_RAND_MAX);
 							pParticle->m_RotationSpeed = FRand(-ROTATION_SPEED, ROTATION_SPEED); // Rotation speed.
 							pParticle->m_CurRotation = FRand(-6, 6);
-							pParticle->m_flSize = SMOKEPARTICLE_SIZE * FRand( 0.85f, 1.15f );
+							pParticle->m_flSize = SMOKEPARTICLE_SIZE * flScale * FRand( 0.7f, 1.3f );
+							pParticle->m_flDensity = FRand( 0.65f, 1.05f );
 
 							//debugoverlay->AddBoxOverlay( vMolded, Vector( -2, -2, -2), Vector( 2, 2, 2), vec3_angle, 255, 0, 0, 255, 5.0f );
 						}
@@ -1371,7 +1420,7 @@ void C_ParticleSmokeGrenade::CleanupToolRecordingState( KeyValues *msg )
 		KeyValues *pEmitter = msg->FindKey( "DmeSpriteEmitter", true );
 		pEmitter->SetInt( "count", NUM_PARTICLES_PER_DIMENSION * NUM_PARTICLES_PER_DIMENSION * NUM_PARTICLES_PER_DIMENSION );
 		pEmitter->SetFloat( "duration", 0 );
-		pEmitter->SetString( "material", "particle/particle_smokegrenade1" );
+		pEmitter->SetString( "material", "particle/smokesprites_0001" );
 		pEmitter->SetInt( "active", true );
 
 		KeyValues *pInitializers = pEmitter->FindKey( "initializers", true );
