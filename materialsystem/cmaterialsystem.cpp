@@ -1789,7 +1789,10 @@ static ConVar mat_monitorgamma_tv_enabled( "mat_monitorgamma_tv_enabled", "1", F
 static ConVar mat_monitorgamma_tv_enabled( "mat_monitorgamma_tv_enabled", "0", FCVAR_ARCHIVE, "" );
 #endif
 
-static ConVar mat_antialias(		"mat_antialias", "0", FCVAR_ARCHIVE );
+// One anti-aliasing option: plain MSAA, 4x by default (see docs/anti-aliasing.md).
+// Bounded 0..4 so an old CSAA-era config (8/16) clamps to 4 rather than asking
+// for a mode the menu no longer offers.
+static ConVar mat_antialias(		"mat_antialias", "4", FCVAR_ARCHIVE, "Anti-aliasing: (0 - off), (2/4 - MSAA samples)", true, 0, true, 4 );
 static ConVar mat_aaquality(		"mat_aaquality", "0", FCVAR_ARCHIVE );
 static ConVar mat_diffuse(			"mat_diffuse", "1", FCVAR_CHEAT );
 //=============================================================================

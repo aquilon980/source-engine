@@ -291,32 +291,17 @@ public:
 		m_pTextureDetail->AddItem("#gameui_high", NULL);
 		m_pTextureDetail->AddItem("#gameui_ultra", NULL);
 
-		// Build list of MSAA and CSAA modes, based upon those which are supported by the device
-		//
-		// The modes that we've seen in the wild to date are as follows (in perf order, fastest to slowest)
-		//
-		//								2x	4x	6x	8x	16x	8x	16xQ
-		//		Texture/Shader Samples	1	1	1	1	1	1	1
-		//		Stored Color/Z Samples	2	4	6	4	4	8	8
-		//		Coverage Samples		2	4	6	8	16	8	16
-		//		MSAA or CSAA			M	M	M	C	C	M	C
-		//
-		//	The CSAA modes are nVidia only (added in the G80 generation of GPUs)
-		//
+		// One anti-aliasing technique: plain MSAA. Only Off and the best single
+		// mode the device supports are offered (4x preferred, else 2x). The old
+		// 6x/8x/16x and nVidia CSAA entries are gone — they aren't meaningfully
+		// better here and 4x is the honest, sharp, cheap choice. CSAA was
+		// nVidia-only anyway. See docs/anti-aliasing.md.
 		m_nNumAAModes = 0;
-		m_pAntialiasingMode = new ComboBox( this, "AntialiasingMode", 10, false );
+		m_pAntialiasingMode = new ComboBox( this, "AntialiasingMode", 2, false );
 		m_pAntialiasingMode->AddItem("#GameUI_None", NULL);
 		m_nAAModes[m_nNumAAModes].m_nNumSamples = 1;
 		m_nAAModes[m_nNumAAModes].m_nQualityLevel = 0;
 		m_nNumAAModes++;
-
-		if ( materials->SupportsMSAAMode(2) )
-		{
-			m_pAntialiasingMode->AddItem("#GameUI_2X", NULL);
-			m_nAAModes[m_nNumAAModes].m_nNumSamples = 2;
-			m_nAAModes[m_nNumAAModes].m_nQualityLevel = 0;
-			m_nNumAAModes++;
-		}
 
 		if ( materials->SupportsMSAAMode(4) )
 		{
@@ -325,44 +310,11 @@ public:
 			m_nAAModes[m_nNumAAModes].m_nQualityLevel = 0;
 			m_nNumAAModes++;
 		}
-
-		if ( materials->SupportsMSAAMode(6) )
+		else if ( materials->SupportsMSAAMode(2) )
 		{
-			m_pAntialiasingMode->AddItem("#GameUI_6X", NULL);
-			m_nAAModes[m_nNumAAModes].m_nNumSamples = 6;
+			m_pAntialiasingMode->AddItem("#GameUI_2X", NULL);
+			m_nAAModes[m_nNumAAModes].m_nNumSamples = 2;
 			m_nAAModes[m_nNumAAModes].m_nQualityLevel = 0;
-			m_nNumAAModes++;
-		}
-
-		if ( materials->SupportsCSAAMode(4, 2) )							// nVidia CSAA			"8x"
-		{
-			m_pAntialiasingMode->AddItem("#GameUI_8X_CSAA", NULL);
-			m_nAAModes[m_nNumAAModes].m_nNumSamples = 4;
-			m_nAAModes[m_nNumAAModes].m_nQualityLevel = 2;
-			m_nNumAAModes++;
-		}
-
-		if ( materials->SupportsCSAAMode(4, 4) )							// nVidia CSAA			"16x"
-		{
-			m_pAntialiasingMode->AddItem("#GameUI_16X_CSAA", NULL);
-			m_nAAModes[m_nNumAAModes].m_nNumSamples = 4;
-			m_nAAModes[m_nNumAAModes].m_nQualityLevel = 4;
-			m_nNumAAModes++;
-		}
-
-		if ( materials->SupportsMSAAMode(8) )
-		{
-			m_pAntialiasingMode->AddItem("#GameUI_8X", NULL);
-			m_nAAModes[m_nNumAAModes].m_nNumSamples = 8;
-			m_nAAModes[m_nNumAAModes].m_nQualityLevel = 0;
-			m_nNumAAModes++;
-		}
-
-		if ( materials->SupportsCSAAMode(8, 2) )							// nVidia CSAA			"16xQ"
-		{
-			m_pAntialiasingMode->AddItem("#GameUI_16XQ_CSAA", NULL);
-			m_nAAModes[m_nNumAAModes].m_nNumSamples = 8;
-			m_nAAModes[m_nNumAAModes].m_nQualityLevel = 2;
 			m_nNumAAModes++;
 		}
 
@@ -534,7 +486,7 @@ public:
 		int nSkipLevels = pKeyValues->GetInt( "ConVar.mat_picmip", 0 );
 		int nAnisotropicLevel = pKeyValues->GetInt( "ConVar.mat_forceaniso", 8 );
 		int nForceTrilinear = pKeyValues->GetInt( "ConVar.mat_trilinear", 1 );
-		int nAASamples = pKeyValues->GetInt( "ConVar.mat_antialias", 0 );
+		int nAASamples = pKeyValues->GetInt( "ConVar.mat_antialias", 4 );
 		int nAAQuality = pKeyValues->GetInt( "ConVar.mat_aaquality", 0 );
 		int nRenderToTextureShadows = pKeyValues->GetInt( "ConVar.r_shadowrendertotexture", 1 );
 		int nShadowDepthTextureShadows = pKeyValues->GetInt( "ConVar.r_flashlightdepthtexture", 1 );
