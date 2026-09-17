@@ -20,7 +20,7 @@
 #include <proto_oob.h>
 #include "checksum_engine.h"
 #include "filesystem_engine.h"
-#include "logofile_shared.h"
+#include "customfile_shared.h"
 #include "sound.h"
 #include "decal.h"
 #include "networkstringtableclient.h"
@@ -55,7 +55,6 @@
 #include "tier0/memdbgon.h"
 
 static ConVar cl_timeout( "cl_timeout", "30", FCVAR_ARCHIVE, "After this many seconds without receiving a packet from the server, the client will disconnect itself" );
-	   ConVar cl_logofile( "cl_logofile", "materials/decals/spraylogo.vtf", FCVAR_ARCHIVE, "Spraypoint logo decal." ); // TODO must be more generic
 static ConVar cl_soundfile( "cl_soundfile", "sound/player/jingle.wav", FCVAR_ARCHIVE, "Jingle sound file." );
 static ConVar cl_allowdownload ( "cl_allowdownload", "1", FCVAR_ARCHIVE, "Client downloads customization files" );
 static ConVar cl_downloadfilter( "cl_downloadfilter", "all", FCVAR_ARCHIVE, "Determines which files can be downloaded from the server (all, none, nosounds, mapsonly)" );
@@ -1203,18 +1202,7 @@ void CClientState::AddCustomFile( int slot, const char *resourceFile)
 		}
 	}
 
-	/* Finally, validate the VTF file. TODO
-	CUtlVector<char> fileData;
-	if ( LogoFile_ReadFile( crcValue, fileData ) )
-	{
-		bValid = true;
-	}
-	else
-	{
-		Warning( "CL_LogoFile_OnConnect: logo file '%s' invalid.\n", logotexture );
-	} */
-
-	m_nCustomFiles[slot].crc = crcValue; // first slot is logo
+	m_nCustomFiles[slot].crc = crcValue;
 	m_nCustomFiles[slot].reqID = 0;
 
 }
@@ -1229,7 +1217,6 @@ void CClientState::CheckOwnCustomFiles()
 
 	if ( IsPC() )
 	{
-		AddCustomFile( 0, cl_logofile.GetString() );
 		AddCustomFile( 1, cl_soundfile.GetString() );
 	}
 }

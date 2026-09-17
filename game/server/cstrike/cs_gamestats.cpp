@@ -182,7 +182,6 @@ bool CCSGameStats::Init( void )
 	ListenForGameEvent( "round_start" );
 	ListenForGameEvent( "round_end" );
 	ListenForGameEvent( "break_prop" );
-	ListenForGameEvent( "player_decal");
 	ListenForGameEvent( "hegrenade_detonate");
 
 	return true;
@@ -452,11 +451,6 @@ void CCSGameStats::Event_PlayerKilled( CBasePlayer *pPlayer, const CTakeDamageIn
 	CCSPlayer *pCSPlayer = ToCSPlayer( pPlayer );
 	
 	IncrementStat( pCSPlayer, CSSTAT_DEATHS, 1 );
-}
-
-void CCSGameStats::Event_PlayerSprayedDecal( CCSPlayer* pPlayer )
-{
-    IncrementStat( pPlayer, CSSTAT_DECAL_SPRAYS, 1 );
 }
 
 void CCSGameStats::Event_PlayerKilled_PreWeaponDrop( CBasePlayer *pPlayer, const CTakeDamageInfo &info )
@@ -1260,12 +1254,7 @@ void CCSGameStats::FireGameEvent( IGameEvent *event )
 		int entindex = event->GetInt("entindex", 0);
  		CBreakableProp* pProp = static_cast<CBreakableProp*>(CBaseEntity::Instance(entindex));
  		Event_BreakProp(ToCSPlayer(UTIL_PlayerByUserId(userid)), pProp);
-	}
-	else if ( V_strcmp(pEventName, "player_decal") == 0 )
-	{
-		int userid = event->GetInt("userid", 0);
-		Event_PlayerSprayedDecal(ToCSPlayer(UTIL_PlayerByUserId(userid)));
-	}
+ 	}
 	else if ( V_strcmp(pEventName, "hegrenade_detonate") == 0 )
 	{
 		int userid = event->GetInt("userid", 0);

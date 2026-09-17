@@ -4,7 +4,7 @@
 // Desc: 		Manages client side stat storage, accumulation, and access
 // Author: 		Peter Freese <peter@hiddenpath.com>
 // Date: 		2009/09/11
-// Copyright:	© 2009 Hidden Path Entertainment
+// Copyright:	ï¿½ 2009 Hidden Path Entertainment
 //
 // Keywords: 	
 //-------------------------------------------------------------
@@ -291,7 +291,6 @@ CON_COMMAND_F( stats_preload, "Load stats with data ripe for getting achievmenet
 		{ CSSTAT_NUM_BOMBS_PLANTED, 99},
 		{ CSSTAT_NUM_HOSTAGES_RESCUED, 499},
 		{ CSSTAT_KILLS_KNIFE_FIGHT, 99},
-		{ CSSTAT_DECAL_SPRAYS, 99},
 		{ CSSTAT_NIGHTVISION_DAMAGE, 4999},
 		{ CSSTAT_KILLS_AGAINST_ZOOMED_SNIPER, 99},
 		{ CSSTAT_MAP_WINS_CS_ASSAULT, 99},
@@ -435,7 +434,6 @@ CON_COMMAND_F( stats_corrupt, "Load stats with corrupt values", FCVAR_DEVELOPMEN
 		{ CSSTAT_KILLS_ENEMY_BLINDED,			0x00000002	},
 		{ CSSTAT_KILLS_ENEMY_WEAPON,			0x00000002	},
 		{ CSSTAT_KILLS_KNIFE_FIGHT,				0x00000000	},
-		{ CSSTAT_DECAL_SPRAYS,					0x00000000	},
 		{ CSSTAT_NIGHTVISION_DAMAGE,			0x00000000	},
 		{ CSSTAT_NUM_HOSTAGES_RESCUED,			0x00000000	},
 		{ CSSTAT_NUM_BROKEN_WINDOWS,			0x00000000	},

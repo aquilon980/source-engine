@@ -253,7 +253,6 @@ public:
 	void Event_MoneyEarned( CCSPlayer *pPlayer, int moneyEarned );
 	void Event_MoneySpent( CCSPlayer *pPlayer, int moneySpent, const char *pItemName );
     void Event_HostageRescued( CCSPlayer *pPlayer );
-    void Event_PlayerSprayedDecal( CCSPlayer*pPlayer );
 	void Event_AllHostagesRescued();
 	void Event_BreakProp( CCSPlayer *pPlayer, CBreakableProp *pProp );
     void Event_PlayerDonatedWeapon (CCSPlayer* pPlayer);

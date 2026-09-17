@@ -84,7 +84,6 @@ void CMatchStatsPage::RepopulateStats()
 	if (m_mapAndMiscellanyStatsGroupPanel->IsGroupActive() || m_allStatsGroupPanel->IsGroupActive())
 	{
 		AddSimpleStat(CSSTAT_MONEY_EARNED, personalMatchStats, tStats, ctStats, serverStats);
-		AddSimpleStat(CSSTAT_DECAL_SPRAYS, personalMatchStats, tStats, ctStats, serverStats);		
 		AddSimpleStat(CSSTAT_NIGHTVISION_DAMAGE, personalMatchStats, tStats, ctStats, serverStats);
 		AddSimpleStat(CSSTAT_NUM_BROKEN_WINDOWS, personalMatchStats, tStats, ctStats, serverStats);
 		AddSimpleStat(CSSTAT_WEAPONS_DONATED, personalMatchStats, tStats, ctStats, serverStats);

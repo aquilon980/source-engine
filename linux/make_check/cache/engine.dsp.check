@@ -3042,7 +3042,6 @@ SOURCE=.\LocalNetworkBackdoor.h
 # End Source File
 # Begin Source File
 
-SOURCE=.\logofile_shared.h
 # End Source File
 # Begin Source File
 
@@ -3286,7 +3285,6 @@ SOURCE=.\sv_log.h
 # End Source File
 # Begin Source File
 
-SOURCE=.\sv_logofile.h
 # End Source File
 # Begin Source File
 

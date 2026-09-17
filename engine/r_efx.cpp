@@ -73,31 +73,6 @@ void CVEfx::DecalColorShoot( int textureIndex, int entity, const model_t *model,
 
 //-----------------------------------------------------------------------------
 // Purpose: 
-// Input  : *material - 
-//			userdata - 
-//			entity - 
-//			*model - 
-//			position - 
-//			*saxis - 
-//			flags - 
-//			&rgbaColor - 
-//-----------------------------------------------------------------------------
-void CVEfx::PlayerDecalShoot( IMaterial *material, void *userdata, int entity, const model_t *model, const Vector& model_origin, const QAngle& model_angles, 
-	const Vector& position, const Vector *saxis, int flags, const color32 &rgbaColor )
-{
-	Vector localPosition = position;
-	if ( entity ) 	// Not world?
-	{
-		matrix3x4_t matrix;
-		AngleMatrix( model_angles, model_origin, matrix );
-		VectorITransform( position, matrix, localPosition );
-	}
-
-	R_PlayerDecalShoot( material, userdata, entity, model, position, saxis, flags, rgbaColor );
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: 
 // Input  : key - 
 // Output : dlight_t
 //-----------------------------------------------------------------------------

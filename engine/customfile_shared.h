@@ -4,8 +4,8 @@
 //
 //=============================================================================//
 
-#ifndef LOGOFILE_SHARED_H
-#define LOGOFILE_SHARED_H
+#ifndef CUSTOMFILE_SHARED_H
+#define CUSTOMFILE_SHARED_H
 #ifdef _WIN32
 #pragma once
 #endif
@@ -26,11 +26,5 @@ public:
 	char m_Filename[MAX_OSPATH];
 };
 
-// Validate a VTF file.
-bool LogoFile_IsValidVTFFile( const void *pData, int len );
 
-// Read in and validate a logo file.
-bool LogoFile_ReadFile( CRC32_t crcValue, CUtlVector<char> &fileData );
-
-
-#endif // LOGOFILE_SHARED_H
+#endif // CUSTOMFILE_SHARED_H

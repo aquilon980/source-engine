@@ -990,7 +990,7 @@ void CBonusMapsDialog::OnControlModified()
 	RefreshDialog( pMap );
 }
 
-// file selected.  This can only happen when someone selects an image to be imported as a spray logo.
+// file selected.  This can only happen when someone selects a bonus map file to import.
 void CBonusMapsDialog::OnFileSelected( const char *fullpath )
 {
 	if ( fullpath == NULL || fullpath[ 0 ] == '\0' )

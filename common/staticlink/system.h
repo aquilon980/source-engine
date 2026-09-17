@@ -483,7 +483,6 @@ public:
 #define TE_LargeFunnel							MAKE_NAME_UNIQUE(TE_LargeFunnel)
 #define TE_MetalSparks							MAKE_NAME_UNIQUE(TE_MetalSparks)
 #define TE_MuzzleFlash							MAKE_NAME_UNIQUE(TE_MuzzleFlash)
-#define TE_PlayerDecal							MAKE_NAME_UNIQUE(TE_PlayerDecal)
 #define TE_ProjectDecal							MAKE_NAME_UNIQUE(TE_ProjectDecal)
 #define TE_ShatterSurface						MAKE_NAME_UNIQUE(TE_ShatterSurface)
 #define TE_ShowLine								MAKE_NAME_UNIQUE(TE_ShowLine)

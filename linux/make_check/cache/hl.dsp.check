@@ -912,7 +912,6 @@ SOURCE=.\te_physicsprop.cpp
 # End Source File
 # Begin Source File
 
-SOURCE=.\te_playerdecal.cpp
 # End Source File
 # Begin Source File
 

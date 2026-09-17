@@ -37,7 +37,6 @@ struct	SoundInfo_t;
 class	KeyValues;
 class	CHLTVServer;
 class	CReplayServer;
-class	CPerClientLogoInfo;
 class	CCommand;
 
 

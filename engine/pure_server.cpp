@@ -255,7 +255,6 @@ void CPureServerWhitelist::AddHardcodedFileCommands()
 	AddFileCommand( "materials/vgui/replay/thumbnails/...", ePureServerFileClass_Any, kLoadOrder_HardcodedOverride );
 	AddFileCommand( "sound/ui/hitsound.wav", ePureServerFileClass_Any, kLoadOrder_HardcodedOverride );
 	AddFileCommand( "sound/ui/killsound.wav", ePureServerFileClass_Any, kLoadOrder_HardcodedOverride );
-	AddFileCommand( "materials/vgui/logos/...", ePureServerFileClass_Any, kLoadOrder_HardcodedOverride );
 }
 
 void CPureServerWhitelist::AddFileCommand( const char *pszFilePath, EPureServerFileClass eFileClass, unsigned short nLoadOrder )

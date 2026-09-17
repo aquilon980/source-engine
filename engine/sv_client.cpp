@@ -18,7 +18,7 @@
 #include "testscriptmgr.h"
 #include "hltvserver.h"
 #include "pr_edict.h"
-#include "logofile_shared.h"
+#include "customfile_shared.h"
 #include "dt_send_eng.h"
 #include "sv_plugin.h"
 #include "download.h"
@@ -522,43 +522,6 @@ void CGameClient::UpdateUserSettings()
 	g_pServerPluginHandler->ClientSettingsChanged( edict );
 }
 
-
-
-//-----------------------------------------------------------------------------
-// Purpose: A File has been received, if it's a logo, send it on to any other players who need it
-//  and return true, otherwise, return false
-// Input  : *cl - 
-//			*filename - 
-// Output : Returns true on success, false on failure.
-/*-----------------------------------------------------------------------------
-bool CGameClient::ProcessIncomingLogo( const char *filename )
-{
-	char crcfilename[ 512 ];
-	char logohex[ 16 ];
-	Q_binarytohex( (byte *)&logo, sizeof( logo ), logohex, sizeof( logohex ) );
-
-	Q_snprintf( crcfilename, sizeof( crcfilename ), "materials/decals/downloads/%s.vtf", logohex );
-
-	// It's not a logo file?
-	if ( Q_strcasecmp( filename, crcfilename ) )
-	{
-		return false;
-	}
-
-	// First, make sure crc is valid
-	CRC32_t check;
-	CRC_File( &check, crcfilename );
-	if ( check != logo )
-	{
-		ConMsg( "Incoming logo file didn't match player's logo CRC, ignoring\n" );
-		// Still note that it was a logo!
-		return true;
-	}
-
-	// Okay, looks good, see if any other players need this logo file
-	SV_SendLogo( check );
-	return true;
-} */
 
 
 /*

@@ -53,7 +53,6 @@
 #include "replay_internal.h"
 #include "replayserver.h"
 #include "KeyValues.h"
-#include "sv_logofile.h"
 #include "cl_steamauth.h"
 #include "sv_steamauth.h"
 #include "sv_plugin.h"

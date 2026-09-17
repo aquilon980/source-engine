@@ -98,8 +98,6 @@ void SV_TermSendTables( ServerClass *pClasses );
 void SV_BroadcastVoiceData(IClient * cl, int nBytes, char * data, int64 xuid);
 void SV_SendRestoreMsg( bf_write &dest );
 
-// A client has uploaded its logo to us;
-void SV_SendLogo( CRC32_t& logoCRC );
 void SV_PruneRequestList( void );
 
 

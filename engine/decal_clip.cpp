@@ -258,8 +258,6 @@ void R_DecalComputeBasis( Vector const& surfaceNormal, Vector const* pSAxis,
 	VectorNormalizeFast( textureSpaceBasis[1] );
 }
 
-#define MAX_PLAYERSPRAY_SIZE		64
-
 void R_SetupDecalTextureSpaceBasis( decal_t *pDecal, Vector &vSurfNormal, IMaterial *pMaterial, Vector textureSpaceBasis[3], float decalWorldScale[2] )
 {
 	// Compute the non-scaled decal basis
@@ -269,26 +267,8 @@ void R_SetupDecalTextureSpaceBasis( decal_t *pDecal, Vector &vSurfNormal, IMater
 	// world height of decal = ptexture->height / pDecal->scale
 	// scale is inverse, scales world space to decal u/v space [0,1]
 	// OPTIMIZE: Get rid of these divides
-	if ( pDecal->flags & FDECAL_PLAYERSPRAY )
-	{
-		int nWidthScale = pMaterial->GetMappingWidth() / MAX_PLAYERSPRAY_SIZE;
-		int nHeightScale = pMaterial->GetMappingHeight() / MAX_PLAYERSPRAY_SIZE;
-		float flScale = static_cast<float>( max( nWidthScale, nHeightScale ) );
-
-		decalWorldScale[0] = pDecal->scale / pMaterial->GetMappingWidth();
-		decalWorldScale[1] = pDecal->scale / pMaterial->GetMappingHeight();
-
-		if ( flScale > 1.0f )
-		{
-			decalWorldScale[0] *= flScale;
-			decalWorldScale[1] *= flScale;
-		}
-	}
-	else
-	{
-		decalWorldScale[0] = pDecal->scale / pMaterial->GetMappingWidth();
-		decalWorldScale[1] = pDecal->scale / pMaterial->GetMappingHeight();
-	}
+	decalWorldScale[0] = pDecal->scale / pMaterial->GetMappingWidth();
+	decalWorldScale[1] = pDecal->scale / pMaterial->GetMappingHeight();
 
 	VectorScale( textureSpaceBasis[0], decalWorldScale[0], textureSpaceBasis[0] );
 	VectorScale( textureSpaceBasis[1], decalWorldScale[1], textureSpaceBasis[1] );

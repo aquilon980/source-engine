@@ -78,7 +78,6 @@ void CLifetimeStatsPage::RepopulateStats()
 	if (m_mapAndMiscellanyStatsGroupPanel->IsGroupActive() || m_allStatsGroupPanel->IsGroupActive())
 	{
 		AddSimpleStat(CSSTAT_MONEY_EARNED, personalLifetimeStats);
-		AddSimpleStat(CSSTAT_DECAL_SPRAYS, personalLifetimeStats);
 		AddSimpleStat(CSSTAT_NIGHTVISION_DAMAGE, personalLifetimeStats);
 		AddSimpleStat(CSSTAT_NUM_BROKEN_WINDOWS, personalLifetimeStats);
 		AddSimpleStat(CSSTAT_WEAPONS_DONATED, personalLifetimeStats);

@@ -52,7 +52,6 @@ $Project "GameUI"
 		$File	"BasePanel.cpp"
 		$File	"GameConsole.cpp"
 		$File	"GameUI_Interface.cpp"
-		$File	"LogoFile.cpp" [!$POSIX]
 		$File	"ModInfo.cpp"
 		$File	"MouseMessageForwardingPanel.cpp"
 		$File	"$SRCDIR\common\GameUI\ObjectList.cpp"

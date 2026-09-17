@@ -67,16 +67,6 @@ ConversionErrorType ImgUtl_WriteGenericVMT( const char *vtfPath, const char *pMa
 ConversionErrorType ImgUtl_WriteRGBAAsPNGToBuffer( const unsigned char *pRGBAData, int nWidth, int nHeight, CUtlBuffer &bufOutData, int nStride = 0 );
 ConversionErrorType ImgUtl_WriteRGBAAsJPEGToBuffer( const unsigned char *pRGBAData, int nWidth, int nHeight, CUtlBuffer &bufOutData, int nStride = 0 );
 
-//
-// Converts pInPath (which can be a TGA, BMP, or JPG file) to a VTF in pMaterialsSubDir, where
-// pMaterialsSubDir is a directory located relative to the game/materials directory.  If the
-// output directory doesn't exist, it will be created.  Dumps a generic VMT in pMaterialsSubDir
-// as well.
-//
-ConversionErrorType	ImgUtl_ConvertToVTFAndDumpVMT( const char *pInPath, const char *pMaterialsSubDir,
-												   int nMaxWidth = -1, int nMaxHeight = -1 );
-
-
 /// Load from image file.  We use the file extension to
 /// decide what file format to use
 ConversionErrorType ImgUtl_LoadBitmap( const char *pszFilename, Bitmap_t &bitmap );

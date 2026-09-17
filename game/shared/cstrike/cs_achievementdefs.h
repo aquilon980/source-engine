@@ -158,7 +158,6 @@ typedef enum
     CSSurviveManyAttacks,
     CSLosslessExtermination,
     CSFlawlessVictory,
-    CSDecalSprays,
     CSBreakWindows,
     CSBreakProps,
     CSUnstoppableForce,

@@ -69,7 +69,6 @@ struct decal_t
 #define FDECAL_DYNAMIC				0x100		// Indicates the decal is dynamic
 #define FDECAL_SECONDPASS			0x200		// Decals that have to be drawn after everything else
 #define FDECAL_DONTSAVE				0x800		// Decal was loaded from adjacent level, don't save out to save file for this level
-#define FDECAL_PLAYERSPRAY			0x1000		// Decal is a player spray
 #define FDECAL_DISTANCESCALE		0x2000		// Decal is dynamically scaled based on distance.
 #define FDECAL_HASUPDATED			0x4000		// Decal has not been updated this frame yet
 

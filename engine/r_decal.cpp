@@ -145,7 +145,6 @@ static ConVar r_dscale_farscale( "r_dscale_farscale", "4", FCVAR_CHEAT );
 static ConVar r_dscale_fardist( "r_dscale_fardist", "2000", FCVAR_CHEAT );
 static ConVar r_dscale_basefov( "r_dscale_basefov", "90", FCVAR_CHEAT );
 
-ConVar r_spray_lifetime( "r_spray_lifetime", "2", 0, "Number of rounds player sprays are visible" );
 ConVar r_queued_decals( "r_queued_decals", "0", 0, "Offloads a bit of decal rendering setup work to the material system queue when enabled." );
 
 
@@ -596,19 +595,9 @@ void R_DecalTerm( worldbrushdata_t *pBrushData, bool term_permanent_decals )
 		{
 			pNext = pDecal->pnext;
 			if ( term_permanent_decals 
-				|| (!(pDecal->flags & FDECAL_PERMANENT)
-				     && !(pDecal->flags & FDECAL_PLAYERSPRAY)) )
+				|| !(pDecal->flags & FDECAL_PERMANENT) )
 			{
 				R_DecalUnlink( pDecal, pBrushData );
-			}
-			else if( pDecal->flags & FDECAL_PLAYERSPRAY )
-			{
-				// time out player spray after some number of rounds
-				pDecal->fadeStartTime += 1.0f;
-				if( pDecal->fadeStartTime >= r_spray_lifetime.GetFloat() )
-				{
-					R_DecalUnlink( pDecal, pBrushData );
-				}
 			}
 		}
 
@@ -781,10 +770,9 @@ int R_FindDynamicDecalSlot( int iStartAt )
 
 	do
 	{
-		// don't deallocate player sprays or permanent decals
+		// don't deallocate permanent decals
 		if ( s_aDecalPool[i] && 
-			!(s_aDecalPool[i]->flags & FDECAL_PERMANENT) &&
-			!(s_aDecalPool[i]->flags & FDECAL_PLAYERSPRAY) )
+			!(s_aDecalPool[i]->flags & FDECAL_PERMANENT) )
 			return i;
 		
 		++i;
@@ -1238,58 +1226,6 @@ void R_DecalShoot( int textureIndex, int entity, const model_t *model, const Vec
 	R_DecalShoot_( pMaterial, entity, model, position, saxis, flags, rgbaColor, pNormal );
 }
 
-//-----------------------------------------------------------------------------
-// Purpose: 
-// Input  : *material - 
-//			playerIndex - 
-//			entity - 
-//			*model - 
-//			position - 
-//			*saxis - 
-//			flags - 
-//			&rgbaColor - 
-//-----------------------------------------------------------------------------
-
-void R_PlayerDecalShoot( IMaterial *material, void *userdata, int entity, const model_t *model, 
-	const Vector& position, const Vector *saxis, int flags, const color32 &rgbaColor )
-{
-	// The userdata that is passed in is actually 
-	// the player number (integer), not sure why it can't be zero.
-	Assert( userdata != 0 );
-
-	//
-	// Linear search through decal pool to retire any other decals this
-	// player has sprayed.  It appears that multiple decals can be
-	// allocated for a single spray due to the way they are mapped to
-	// surfaces.  We need to run through and clean them all up.  This
-	// seems like the cleanest way to manage this - especially since
-	// it doesn't happen that often.
-	//
-	int i;
-	CUtlVector<decal_t *> decalVec;
-
-	for ( i = 0; i<s_aDecalPool.Count(); i++ )
-	{
-		decal_t * decal = s_aDecalPool[i];
-
-		if( decal && (decal->flags & FDECAL_PLAYERSPRAY) && (decal->userdata == userdata) )
-		{
-			decalVec.AddToTail( decal );
-		}
-	}
-
-	// remove all the sprays we found
-	for ( i = 0; i < decalVec.Count(); i++ )
-	{
-		R_DecalUnlink( decalVec[i], host_state.worldbrush );
-	}
-
-	// set this to be a player spray so it is timed out appropriately.
-	flags |= FDECAL_PLAYERSPRAY;
-
-	R_DecalShoot_( material, entity, model, position, saxis, flags, rgbaColor, NULL, userdata );
-}
-
 struct decalcontext_t 
 {
 	Vector vModelOrg;
@@ -1392,9 +1328,8 @@ static decal_t *R_DecalFindOverlappingDecals( decalinfo_t* decalinfo, SurfaceHan
 		pMaterial = pDecal->material;
 
 		// Don't steal bigger decals and replace them with smaller decals
-		// Don't steal permanent decals, or player sprays
-		if ( !(pDecal->flags & FDECAL_PERMANENT) && 
-			 !(pDecal->flags & FDECAL_PLAYERSPRAY) && pMaterial )
+		// Don't steal permanent decals
+		if ( !(pDecal->flags & FDECAL_PERMANENT) && pMaterial )
 		{
 			Vector testBasis[3];
 			float testWorldScale[2];
@@ -1725,16 +1660,6 @@ static void R_DecalCreate( decalinfo_t* decalinfo, SurfaceHandle_t surfID, float
 		pdecal->fadeStartTime += cl.GetTime();
 	}
 
-	// check for a player spray
-	if( pdecal->flags & FDECAL_PLAYERSPRAY )
-	{
-		// reset the number of rounds this should be visible for
-		pdecal->fadeStartTime = 0.0f;
-
-		// Force the scale to 1 for player sprays.
-		pdecal->scale = 1.0f;
-	}
-
 	if( !bForceForDisplacement )
 	{
 		// Check to see if the decal actually intersects the surface
@@ -1775,12 +1700,8 @@ bool DecalUpdate( decal_t* pDecal )
 // triangles the same way.
 CDecalVert* R_DecalSetupVerts( decalcontext_t &context, decal_t *pDecal, SurfaceHandle_t surfID, IMaterial *pMaterial )
 {
-	//
-	// Do not scale playersprays
-	//
 	if( pDecal->flags & FDECAL_DISTANCESCALE )
 	{
-		if( !(pDecal->flags & FDECAL_PLAYERSPRAY) )
 		{
 			float scaleFactor = 1.0f;
 			float nearScale, farScale, nearDist, farDist;

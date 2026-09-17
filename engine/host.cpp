@@ -138,7 +138,6 @@
 extern IXboxSystem *g_pXboxSystem;
 
 extern ConVar cl_cloud_settings;
-extern ConVar cl_logofile;
 
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
@@ -160,8 +159,6 @@ bool g_bLowViolence = false;
 int g_HostServerAbortCount = 0;
 int g_HostErrorCount = 0;
 int g_HostEndDemo = 0;
-
-char g_szDefaultLogoFileName[] = "materials/vgui/logos/spray.vtf";
 
 int host_frameticks = 0;
 int host_tickcount = 0;
@@ -1296,60 +1293,6 @@ void Host_WriteConfiguration( const char *filename, bool bAllVars )
 							// probably a quota issue. TODO what to do ?
 							DevMsg( "[Cloud]: FAILED saving %s in remote storage\n", szFileName );
 						}
-
-						// write the current logo file
-						char szLogoFileName[MAX_PATH]; 
-						Q_strncpy( szLogoFileName, cl_logofile.GetString(), sizeof(szLogoFileName) ); // .vtf file
-
-						if ( g_pFileSystem->FileExists( szLogoFileName, "MOD" ) )
-						{
-							// store logo .VTF file
-							FileHandle_t hFile = g_pFileSystem->Open( szLogoFileName, "rb", "MOD" );
-							if ( FILESYSTEM_INVALID_HANDLE != hFile )
-							{
-								unsigned int unSize = g_pFileSystem->Size( hFile );
-
-								byte *pBuffer = (byte*) malloc( unSize );
-								if ( g_pFileSystem->Read( pBuffer, unSize, hFile ) == unSize )
-								{
-									Q_SetExtension( g_szDefaultLogoFileName, ".vtf", sizeof(g_szDefaultLogoFileName) );
-									if ( pRemoteStorage->FileWrite( g_szDefaultLogoFileName, pBuffer, unSize ) )
-									{
-										DevMsg( "[Cloud]: SUCCEESS saving %s in remote storage\n", g_szDefaultLogoFileName );
-									}
-									else
-									{
-										DevMsg( "[Cloud]: FAILED saving %s in remote storage\n", g_szDefaultLogoFileName );
-									}
-								}
-								free( pBuffer );
-								g_pFileSystem->Close( hFile );
-							}
-
-							// store logo .VMT file
-							Q_SetExtension( szLogoFileName, ".vmt", sizeof(szLogoFileName) );
-							hFile = g_pFileSystem->Open( szLogoFileName, "rb", "MOD" );
-							if ( FILESYSTEM_INVALID_HANDLE != hFile )
-							{
-								unsigned int unSize = g_pFileSystem->Size( hFile );
-
-								byte *pBuffer = (byte*) malloc( unSize );
-								if ( g_pFileSystem->Read( pBuffer, unSize, hFile ) == unSize )
-								{
-									Q_SetExtension( g_szDefaultLogoFileName, ".vmt", sizeof(g_szDefaultLogoFileName) );
-									if ( pRemoteStorage->FileWrite( g_szDefaultLogoFileName, pBuffer, unSize ) )
-									{
-										DevMsg( "[Cloud]: SUCCEESS saving %s in remote storage\n", g_szDefaultLogoFileName );
-									}
-									else
-									{
-										DevMsg( "[Cloud]: FAILED saving %s in remote storage\n", g_szDefaultLogoFileName );
-									}
-								}
-								free( pBuffer );
-								g_pFileSystem->Close( hFile );
-							}
-						}
 					}
 				}
 			}
@@ -1630,22 +1573,6 @@ void Host_ReadConfiguration()
 	}
 
 	Cbuf_Execute();
-
-	if ( pRemoteStorage )
-	{
-		if ( cl_cloud_settings.GetInt() == STEAMREMOTESTORAGE_CLOUD_ON )
-		{
-			// get logo .VTF file
-			Q_SetExtension( g_szDefaultLogoFileName, ".vtf", sizeof(g_szDefaultLogoFileName) );
-			GetFileFromRemoteStorage( pRemoteStorage, g_szDefaultLogoFileName, g_szDefaultLogoFileName );
-
-			cl_logofile.SetValue( g_szDefaultLogoFileName );
-
-			// get logo .VMT file
-			Q_SetExtension( g_szDefaultLogoFileName, ".vmt", sizeof(g_szDefaultLogoFileName) );
-			GetFileFromRemoteStorage( pRemoteStorage, g_szDefaultLogoFileName, g_szDefaultLogoFileName );
-		}
-	}
 
 	// check to see if we actually set any keys, if not, load defaults from kb_def.lst
 	// so we at least have basics setup.

@@ -5573,63 +5573,6 @@ void CBasePlayer::LeaveVehicle( const Vector &vecExitPoint, const QAngle &vecExi
 }
 
 
-//==============================================
-// !!!UNDONE:ultra temporary SprayCan entity to apply
-// decal frame at a time. For PreAlpha CD
-//==============================================
-class CSprayCan : public CPointEntity
-{
-public:
-	DECLARE_CLASS( CSprayCan, CPointEntity );
-
-	void	Spawn ( CBasePlayer *pOwner );
-	void	Think( void );
-
-	virtual void Precache();
-
-	virtual int	ObjectCaps( void ) { return FCAP_DONT_SAVE; }
-};
-
-LINK_ENTITY_TO_CLASS( spraycan, CSprayCan );
-PRECACHE_REGISTER( spraycan );
-
-void CSprayCan::Spawn ( CBasePlayer *pOwner )
-{
-	SetLocalOrigin( pOwner->WorldSpaceCenter() + Vector ( 0 , 0 , 32 ) );
-	SetLocalAngles( pOwner->EyeAngles() );
-	SetOwnerEntity( pOwner );
-	SetNextThink( gpGlobals->curtime );
-	EmitSound( "SprayCan.Paint" );
-}
-
-void CSprayCan::Precache()
-{
-	BaseClass::Precache();
-
-	PrecacheScriptSound( "SprayCan.Paint" );
-}
-
-void CSprayCan::Think( void )
-{
-	CBasePlayer *pPlayer = ToBasePlayer( GetOwnerEntity() );
-	if ( pPlayer )
-	{
-       	int playernum = pPlayer->entindex();
-		
-		Vector forward;
-		trace_t	tr;	
-
-		AngleVectors( GetAbsAngles(), &forward );
-		UTIL_TraceLine ( GetAbsOrigin(), GetAbsOrigin() + forward * 128, 
-			MASK_SOLID_BRUSHONLY, pPlayer, COLLISION_GROUP_NONE, & tr);
-
-		UTIL_PlayerDecalTrace( &tr, playernum );
-	}
-	
-	// Just painted last custom frame.
-	UTIL_Remove( this );
-}
-
 class	CBloodSplat : public CPointEntity
 {
 public:
@@ -5886,8 +5829,6 @@ ImpulseCommands
 
 void CBasePlayer::ImpulseCommands( )
 {
-	trace_t	tr;
-		
 	int iImpulse = (int)m_nImpulse;
 	switch (iImpulse)
 	{
@@ -5919,50 +5860,6 @@ void CBasePlayer::ImpulseCommands( )
 				pWeapon->Holster();
 			}
 		}
-		break;
-
-	case	201:// paint decal
-		
-		if ( gpGlobals->curtime < m_flNextDecalTime )
-		{
-			// too early!
-			break;
-		}
-
-		{
-			Vector forward;
-			EyeVectors( &forward );
-			UTIL_TraceLine ( EyePosition(), 
-				EyePosition() + forward * 128, 
-				MASK_SOLID_BRUSHONLY, this, COLLISION_GROUP_NONE, & tr);
-		}
-
-		if ( tr.fraction != 1.0 )
-		{// line hit something, so paint a decal
-			m_flNextDecalTime = gpGlobals->curtime + decalfrequency.GetFloat();
-			CSprayCan *pCan = CREATE_UNSAVED_ENTITY( CSprayCan, "spraycan" );
-			pCan->Spawn( this );
-
-#ifdef CSTRIKE_DLL
-			//=============================================================================
-			// HPE_BEGIN:
-			// [pfreese] Fire off a game event - the Counter-Strike stats manager listens
-			// to these achievements for one of the CS achievements.
-			//=============================================================================
-			
-			IGameEvent * event = gameeventmanager->CreateEvent( "player_decal" );
-			if ( event )
-			{
-				event->SetInt("userid", GetUserID() );
-				gameeventmanager->FireEvent( event );
-			}
-
-			//=============================================================================
-			// HPE_END
-			//=============================================================================
-#endif			
-		}
-
 		break;
 
 	case	202:// player jungle sound 

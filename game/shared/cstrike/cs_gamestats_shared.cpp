@@ -204,7 +204,6 @@ CSStatProperty CSStatProperty_Table[] =
 	{	CSSTAT_KILLS_KNIFE_FIGHT,				"total_kills_knife_fight",			"#GAMEUI_Stat_KnifeFightKills",			CSSTAT_PRIORITY_HIGH,			},
 	{	CSSTAT_KILLS_WHILE_DEFENDING_BOMB,		NULL,								NULL,									CSSTAT_PRIORITY_NEVER,			},
 
-	{	CSSTAT_DECAL_SPRAYS,					"total_decal_sprays",				"#GAMEUI_Stat_DecalSprays",				CSSTAT_PRIORITY_HIGH,			},
 	{	CSSTAT_TOTAL_JUMPS,						NULL,								NULL,									CSSTAT_PRIORITY_NEVER,			},
 	{	CSSTAT_NIGHTVISION_DAMAGE,				"total_nightvision_damage",			"#GAMEUI_Stat_NightvisionDamage",		CSSTAT_PRIORITY_LOW,			},
 	{	CSSTAT_KILLS_WHILE_LAST_PLAYER_ALIVE,	NULL,								NULL,									CSSTAT_PRIORITY_NEVER,			},
