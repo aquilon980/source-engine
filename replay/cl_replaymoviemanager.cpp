@@ -271,8 +271,47 @@ void CReplayMovieManager::SetupHighDetailTextures()
 
 void CReplayMovieManager::SetupHighQualityAntialiasing()
 {
-	// Empty stub: MSAA is gone and the single post-process AA is always on
-	// (see docs/anti-aliasing.md). Kept so callers don't change.
+	int nNumSamples = 1;
+	int nQualityLevel = 0;
+
+	if ( materials->SupportsCSAAMode(8, 2) )
+	{
+		nNumSamples = 8;
+		nQualityLevel = 2;
+	}
+	else if ( materials->SupportsMSAAMode(8) )
+	{
+		nNumSamples = 8;
+		nQualityLevel = 0;
+	}
+	else if ( materials->SupportsCSAAMode(4, 4) )
+	{
+		nNumSamples = 4;
+		nQualityLevel = 4;
+	}
+	else if ( materials->SupportsCSAAMode(4, 2) )
+	{
+		nNumSamples = 4;
+		nQualityLevel = 2;
+	}
+	else if ( materials->SupportsMSAAMode(6) )
+	{
+		nNumSamples = 6;
+		nQualityLevel = 0;
+	}
+	else if ( materials->SupportsMSAAMode(4) )
+	{
+		nNumSamples = 4;
+		nQualityLevel = 0;
+	}
+	else if ( materials->SupportsMSAAMode(2) )
+	{
+		nNumSamples = 2;
+		nQualityLevel = 0;
+	}
+
+	g_pEngine->Cbuf_AddText( Replay_va( "mat_antialias %i\n", nNumSamples ) );
+	g_pEngine->Cbuf_AddText( Replay_va( "mat_aaquality %i\n", nQualityLevel ) );
 }
 
 void CReplayMovieManager::SetupHighQualityFiltering()

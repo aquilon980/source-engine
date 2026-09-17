@@ -182,10 +182,7 @@ struct MaterialSystem_Config_t
 		m_fGammaTVExponent = 2.5;
 		m_bGammaTVEnabled = IsX360();
 
-		// MSAA is gone; 0 so a default-constructed config can never ask for a
-		// multisampled backbuffer (see docs/anti-aliasing.md).
-		m_nAASamples = 0;
-		m_nAAQuality = 0;
+		m_nAASamples = 1;
 		m_bShadowDepthTexture = false;
 		m_bMotionBlur = false;
 		m_bSupportFlashlight = true;

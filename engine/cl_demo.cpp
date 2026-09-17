@@ -1763,7 +1763,7 @@ void CDemoPlayer::WriteTimeDemoResults( void )
 		g_pFileSystem->FPrintf( fileHandle, "height," );
 		g_pFileSystem->FPrintf( fileHandle, "windowed," );
 		g_pFileSystem->FPrintf( fileHandle, "vsync," );
-		g_pFileSystem->FPrintf( fileHandle, "AA," );
+		g_pFileSystem->FPrintf( fileHandle, "MSAA," );
 		g_pFileSystem->FPrintf( fileHandle, "Aniso," );
 		g_pFileSystem->FPrintf( fileHandle, "dxlevel," );
 		g_pFileSystem->FPrintf( fileHandle, "cmdline," );
