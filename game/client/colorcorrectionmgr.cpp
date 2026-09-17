@@ -8,6 +8,69 @@
 #include "cbase.h"
 #include "tier0/vprof.h"
 #include "colorcorrectionmgr.h"
+#include "filesystem.h"
+
+
+//------------------------------------------------------------------------------
+// Custom filmic tonemap
+//
+// macOS can't compile a new post-process shader (no HLSL compiler here, and waf
+// does not rebuild the fxctmp9 combo indices), but Source's colour-correction
+// pass is a per-pixel transform whose input is a data file: a 3D lookup table.
+// So the "tonemapper" is a 32x32x32 LUT, baked by scripts/bake-tonemap.py and
+// shipped in the seb_defaults pack. See docs/tonemap.md.
+//------------------------------------------------------------------------------
+static ConVar cl_tonemap( "cl_tonemap", "1", FCVAR_ARCHIVE,
+	"Custom filmic tonemap / colour grade (0 = off, stock colours)." );
+static ConVar cl_tonemap_strength( "cl_tonemap_strength", "1.0", FCVAR_ARCHIVE,
+	"Blend strength of the custom tonemap (0..1).", true, 0.0f, true, 1.0f );
+
+#define SEB_TONEMAP_FILE "materials/correction/seb_tonemap.raw"
+
+static ClientCCHandle_t s_TonemapHandle = INVALID_CLIENT_CCHANDLE;
+static bool s_bTonemapMissingWarned = false;
+
+// Creates the lookup on first use, then keeps its weight in sync with the cvars.
+// Runs right after the per-frame weight reset, so a map's own colour-correction
+// entities still blend on top of ours.
+static void SebTonemap_Update()
+{
+	// Off: never create the lookup. Creating it while off would both cost the
+	// pass and flash the grade for one frame, because SetLookupWeight() only
+	// ever *raises* a weight -- it is the per-frame ResetLookupWeights() (this
+	// lookup is resetable) that lets a weight drop again, and that lands on the
+	// next frame.
+	if ( !cl_tonemap.GetBool() )
+	{
+		return;
+	}
+
+	if ( s_TonemapHandle == INVALID_CLIENT_CCHANDLE )
+	{
+		if ( !g_pFullFileSystem->FileExists( SEB_TONEMAP_FILE, "GAME" ) )
+		{
+			if ( !s_bTonemapMissingWarned )
+			{
+				Warning( "cl_tonemap: lookup '%s' not found; tonemap disabled.\n", SEB_TONEMAP_FILE );
+				s_bTonemapMissingWarned = true;
+			}
+			return;
+		}
+
+		s_TonemapHandle = g_pColorCorrectionMgr->AddColorCorrection( "seb_tonemap", SEB_TONEMAP_FILE );
+		if ( s_TonemapHandle == INVALID_CLIENT_CCHANDLE )
+		{
+			Warning( "cl_tonemap: could not create colour-correction lookup.\n" );
+			return;
+		}
+	}
+
+	// Re-asserted every frame. The reset just zeroed this lookup (it is
+	// resetable), so this is always a raise from 0 and always takes effect --
+	// which is what makes cl_tonemap_strength go both up and down, and the
+	// cvar go back to stock when set to 0.
+	g_pColorCorrectionMgr->SetColorCorrectionWeight( s_TonemapHandle, cl_tonemap_strength.GetFloat() );
+}
 
 
 //------------------------------------------------------------------------------
@@ -93,6 +156,10 @@ void CColorCorrectionMgr::ResetColorCorrectionWeights()
 	CMatRenderContextPtr pRenderContext( g_pMaterialSystem );
 	pRenderContext->ResetLookupWeights();
 	m_nActiveWeightCount = 0;
+
+	// Re-assert our tonemap after the reset, before the CC entities get to
+	// blend theirs in during SimulateEntities.
+	SebTonemap_Update();
 }
 
 void CColorCorrectionMgr::SetResetable( ClientCCHandle_t h, bool bResetable )
