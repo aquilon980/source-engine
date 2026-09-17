@@ -362,6 +362,12 @@ void CGame::HandleMsg_Close( const InputEvent_t &event )
 	}
 }
 
+// The key bound to toggleconsole also emits its own text character (on a UK
+// Mac layout that's '§', US is '`') as a separate IE_KeyTyped that SDL sends
+// right after the key. Arm a one-shot swallow so the console the key just
+// opened doesn't get that stray character typed into it.
+static bool s_bSwallowToggleChar = false;
+
 void CGame::DispatchInputEvent( const InputEvent_t &event )
 {
 	switch( event.m_nType )
@@ -371,7 +377,35 @@ void CGame::DispatchInputEvent( const InputEvent_t &event )
 	case IE_ButtonPressed:
 	case IE_ButtonDoubleClicked:
 	case IE_ButtonReleased:
+		// Recompute on every button event: armed only while the key bound to
+		// toggleconsole is pressed, so the flag can't leak onto later typing.
+		{
+			ButtonCode_t code = (ButtonCode_t)event.m_nData;
+			const char *pToggleKey = Key_NameForBinding( "toggleconsole" );
+			s_bSwallowToggleChar = ( event.m_nType == IE_ButtonPressed && pToggleKey &&
+									 !Q_stricmp( pToggleKey, g_pInputSystem->ButtonCodeToString( code ) ) );
+		}
 		Key_Event( event );
+		break;
+	case IE_FirstVguiEvent + 3:	// IE_KeyTyped (vguimatsurface/Input.cpp)
+		// Swallow the console-toggle key's own character (see above).
+		if ( s_bSwallowToggleChar )
+		{
+			s_bSwallowToggleChar = false;
+			break;
+		}
+		// Otherwise let vgui have the first whack at it, same as default.
+		if ( g_pMatSystemSurface && g_pMatSystemSurface->HandleInputEvent( event ) )
+			break;
+
+		for ( int i=0; i < ARRAYSIZE( g_GameMessageHandlers ); i++ )
+		{
+			if ( g_GameMessageHandlers[i].m_nEventType == event.m_nType )
+			{
+				(this->*g_GameMessageHandlers[i].pFn)( event );
+				break;
+			}
+		}
 		break;
 	case IE_FingerDown:
 	case IE_FingerUp:
