@@ -278,8 +278,9 @@ private:
 		bool	bExplosion;
 		float	flRadius;
 		float	flStrength;		// 0..1 how opaque the hole stays at full open
-		float	flBirth;
-		float	flLife;			// seconds from birth to fully refilled
+		float	flBirth;		// when it opened — drives the pop-in ramp
+		float	flEndTime;		// when it has fully refilled (pushed back on a spray)
+		float	flRecover;		// refill duration, for the feather shape
 	};
 	enum { MAX_CARVE_HOLES = 12 };
 	SmokeHole_t			m_CarveHoles[MAX_CARVE_HOLES];
@@ -757,7 +758,7 @@ void C_ParticleSmokeGrenade::Update(float fTimeDelta)
 		// Retire spent carve holes (swap-remove; order doesn't matter).
 		for ( int i = 0; i < m_nCarveHoles; )
 		{
-			if ( gpGlobals->curtime >= m_CarveHoles[i].flBirth + m_CarveHoles[i].flLife )
+			if ( gpGlobals->curtime >= m_CarveHoles[i].flEndTime )
 				m_CarveHoles[i] = m_CarveHoles[--m_nCarveHoles];
 			else
 				i++;
@@ -871,13 +872,16 @@ float C_ParticleSmokeGrenade::HoleSuppressAt( const Vector &vWorldPos, float flP
 		const SmokeHole_t &h = m_CarveHoles[i];
 
 		float flAge = flNow - h.flBirth;
-		float flLeft = h.flLife - flAge;
+		float flLeft = h.flEndTime - flNow;
 		if ( flLeft <= 0.0f )
 			continue;
 
-		// Open fast (~0.12s), hold, then refill over the tail of the life.
+		// Open fast (~0.12s), hold, then refill over the tail of the recover
+		// window. The pop uses birth (so a spray that keeps pushing the expiry
+		// back never re-ramps it), and the feather uses the fixed recover time
+		// (so a long-held hole doesn't dim as its age grows).
 		float flPop = clamp( flAge / 0.12f, 0.0f, 1.0f );
-		float flFade = clamp( flLeft / MAX( 0.01f, h.flLife * 0.6f ), 0.0f, 1.0f );
+		float flFade = clamp( flLeft / MAX( 0.01f, h.flRecover * 0.6f ), 0.0f, 1.0f );
 
 		if ( h.bExplosion )
 		{
@@ -1532,11 +1536,14 @@ void C_ParticleSmokeGrenade::AddCarveHole( const Vector &vCenter, float flRadius
 			float flMergeDist = MAX( h.flRadius, flRadius ) * 0.9f;
 			if ( ( vCenter - h.vCenter ).Length() <= flMergeDist )
 			{
+				// Keep flBirth: re-birthing would restart the pop ramp, so a
+				// held burst never let the hole open. Only push the expiry out
+				// (and take the wider/stronger of the two).
 				h.vCenter = vCenter;						// follow the spray
 				h.flRadius = MAX( h.flRadius, flRadius );
 				h.flStrength = MAX( h.flStrength, MIN( 1.0f, flStrength ) );
-				h.flBirth = gpGlobals->curtime;				// reset pop + full life
-				h.flLife = MAX( 0.05f, flLife );
+				h.flRecover = MAX( h.flRecover, flLife );
+				h.flEndTime = gpGlobals->curtime + h.flRecover;
 				return;
 			}
 		}
@@ -1551,8 +1558,7 @@ void C_ParticleSmokeGrenade::AddCarveHole( const Vector &vCenter, float flRadius
 	{
 		nSlot = 0;
 		for ( int i = 1; i < MAX_CARVE_HOLES; i++ )
-			if ( ( m_CarveHoles[i].flBirth + m_CarveHoles[i].flLife ) <
-				 ( m_CarveHoles[nSlot].flBirth + m_CarveHoles[nSlot].flLife ) )
+			if ( m_CarveHoles[i].flEndTime < m_CarveHoles[nSlot].flEndTime )
 				nSlot = i;
 	}
 
@@ -1561,8 +1567,9 @@ void C_ParticleSmokeGrenade::AddCarveHole( const Vector &vCenter, float flRadius
 	h.bExplosion = bExplosion;
 	h.flRadius = flRadius;
 	h.flStrength = MIN( 1.0f, flStrength );
+	h.flRecover = MAX( 0.05f, flLife );
 	h.flBirth = gpGlobals->curtime;
-	h.flLife = MAX( 0.05f, flLife );
+	h.flEndTime = gpGlobals->curtime + h.flRecover;
 }
 
 
