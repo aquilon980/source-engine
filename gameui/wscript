@@ -52,7 +52,6 @@ def build(bld):
 		'BonusMapsDialog.cpp',
 		'CommentaryDialog.cpp',
 		'CommentaryExplanationDialog.cpp',
-		'ContentControlDialog.cpp',
 		'CustomTabExplanationDialog.cpp',
 		'GameConsoleDialog.cpp',
 		'LoadGameDialog_Xbox.cpp',
