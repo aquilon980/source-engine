@@ -96,7 +96,8 @@ struct BobState_t
 		m_flStepPhase = 0.0f;
 		m_flStepBlend = 0.0f;
 		m_flLockError = 0.0f;
-		m_nStepParity = 0;
+		m_flLastFootfallTime = 0.0f;
+		m_flBobGroundBlend = 1.0f;
 	}
 
 	float m_flBobTime;
@@ -106,17 +107,19 @@ struct BobState_t
 	float m_flLateralBob;
 	float m_flRawVerticalBob;
 	float m_flRawLateralBob;
-	// Footfall sync: latched step interval (seconds), last observed step
-	// timer (ms, -1 = unseen), free-running render phase (radians), blend
-	// 0 = free-run → 1 = step-locked, pending glide-into-lock error
-	// (radians), and stride parity (alternates the lateral extreme each
-	// footfall).
+	// Footfall sync: eased step interval (seconds), last observed step
+	// timer (ms, -1 = unseen), free-running render phase (radians, wrapped
+	// at 4pi = two strides), blend 0 = free-run → 1 = step-locked, pending
+	// glide-into-lock error (radians), time (curtime) of the last accepted
+	// footfall (debounces jittery observations), and an eased ground/air
+	// blend so the 5x airborne amplitude change can't snap.
 	float m_flStepInterval;
 	float m_flLastStepTimer;
 	float m_flStepPhase;
 	float m_flStepBlend;
 	float m_flLockError;
-	int m_nStepParity;
+	float m_flLastFootfallTime;
+	float m_flBobGroundBlend;
 };
 
 float CalcViewModelBobHelper( CBasePlayer *player, BobState_t *pBobState, float flMaxSpeed );

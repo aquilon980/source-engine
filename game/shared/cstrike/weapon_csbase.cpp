@@ -1714,35 +1714,51 @@ bool CWeaponCSBase::IsUseable()
 		// command/tick rate and is sampled at the client's snapshot rate. Using
 		// it as the phase directly makes the gun tick at that rate and jump
 		// whenever the network corrects it. Use it ONLY to detect each footfall
-		// and latch the stride, and integrate the visible phase locally every
-		// render frame - so the bob is always smooth and still lands exactly on
-		// the footfall. Airborne/idle the timer sits at 0, so the phase
-		// free-runs at the last stride rate and the next footfall re-locks it
-		// with a short glide, so it neither freezes nor pops.
+		// and correct the stride, and integrate the visible phase locally every
+		// render frame - so the bob is always smooth and still lands on the
+		// footfall. The lock is deliberately soft (debounced detection, stride
+		// eased not latched, error clamped) because a hard snap to a jittery
+		// observation is exactly what showed up as a viewmodel jitter.
 		float flRawDt = gpGlobals->curtime - pBobState->m_flLastBobTime;
 		float flDt = clamp( flRawDt, 0.0f, 0.1f );
 		float flStepTimer = player->GetStepSoundTime();
 
-		// Fresh weapon or a stall: the old timer and phase aren't trustworthy.
+		// Fresh weapon or a stall: the old timer and phase aren't trustworthy,
+		// and the clamped dt would still advance the phase a third of a cycle
+		// in one frame (a visible pop on every weapon switch). Zero the phase
+		// and don't advance it at all this frame.
 		if ( flRawDt > 0.25f )
 		{
 			pBobState->m_flLastStepTimer = -1.0f;
 			pBobState->m_flLockError = 0.0f;
+			pBobState->m_flStepPhase = 0.0f;
+			pBobState->m_flStepBlend = 0.0f;
+			pBobState->m_flLastFootfallTime = 0.0f;
+			flDt = 0.0f;
 		}
 
 		// A footfall is the timer running down to ~0 and snapping back up to
-		// roughly its interval. Demand a real jump from near zero, so network
-		// jitter (or a stale value) can't fake one and flip the lateral sway.
+		// roughly its interval. Demand a real jump from near zero AND at least
+		// half a stride since the last one, so network jitter (or a stale
+		// value) can't fake a step, double-fire, and flip the sway twice.
+		float flStride = MAX( 0.15f, pBobState->m_flStepInterval );
 		bool bFootfall = ( pBobState->m_flLastStepTimer >= 0.0f &&
 			pBobState->m_flLastStepTimer < 60.0f &&
-			flStepTimer > pBobState->m_flLastStepTimer + 60.0f );
+			flStepTimer > pBobState->m_flLastStepTimer + 60.0f &&
+			( pBobState->m_flLastFootfallTime <= 0.0f ||
+			  ( gpGlobals->curtime - pBobState->m_flLastFootfallTime ) > flStride * 0.5f ) );
 		if ( bFootfall )
 		{
-			pBobState->m_flStepInterval = clamp( flStepTimer * 0.001f, 0.15f, 0.8f );
-			pBobState->m_nStepParity++;
+			// Ease the stride toward the observed one instead of latching it.
+			// A hard latch injects a big phase error the first time the rate
+			// changes (start running, walk, duck), and the gun then visibly
+			// speeds up to catch it.
+			float flNewStride = clamp( flStepTimer * 0.001f, 0.15f, 0.8f );
+			pBobState->m_flStepInterval = pBobState->m_flStepInterval * 0.5f + flNewStride * 0.5f;
+			pBobState->m_flLastFootfallTime = gpGlobals->curtime;
 		}
-		float flStride = MAX( 0.15f, pBobState->m_flStepInterval );
 		pBobState->m_flLastStepTimer = flStepTimer;
+		flStride = MAX( 0.15f, pBobState->m_flStepInterval );
 
 		if ( flStepTimer > 0.5f )
 		{
@@ -1757,34 +1773,47 @@ bool CWeaponCSBase::IsUseable()
 
 		// Smooth local integration: exactly one cycle per stride.
 		pBobState->m_flStepPhase += ( 2.0f * M_PI * flDt ) / flStride;
-		// Keep the phase bounded so frac() never loses precision over a long run.
-		pBobState->m_flStepPhase -= 2.0f * M_PI * floorf( pBobState->m_flStepPhase / ( 2.0f * M_PI ) );
+		// Keep the phase bounded so frac() never loses precision over a long
+		// run. Wrap at TWO strides (4pi): the vertical bob is one cycle per
+		// stride and the lateral sway one per two, and both are derived from
+		// this one phase below, so a 2pi wrap would fold the lateral.
+		pBobState->m_flStepPhase -= 4.0f * M_PI * floorf( pBobState->m_flStepPhase / ( 4.0f * M_PI ) );
 
 		// The true phase is 0 on the footfall, so remember how far off we are
-		// and bleed it off at a bounded rate: a glide into lock, never a snap
-		// and never a chase of the timer's stair-steps.
+		// and bleed it off at a bounded rate. The error is CLAMPED: a real
+		// footfall is always observed within a frame or two of the reset, so
+		// the phase is naturally near 0. A big error only ever means the
+		// observation of the reset was late/jittery (network, tick vs frame),
+		// and chasing it would lurch the gun — so a bad observation is treated
+		// as a small nudge, never a jump.
 		if ( bFootfall )
 		{
 			float flErr = -pBobState->m_flStepPhase;
 			flErr -= 2.0f * M_PI * floorf( flErr / ( 2.0f * M_PI ) + 0.5f );
-			pBobState->m_flLockError = flErr;
+			pBobState->m_flLockError = clamp( flErr, -0.35f, 0.35f );
 		}
 		float flCorrStep = 2.0f * M_PI * flDt * 3.0f;	// at most 3 cycles/second
 		float flCorr = clamp( pBobState->m_flLockError * pBobState->m_flStepBlend, -flCorrStep, flCorrStep );
 		pBobState->m_flStepPhase += flCorr;
 		pBobState->m_flLockError -= flCorr;
 
-		float flPRender = pBobState->m_flStepPhase / ( 2.0f * M_PI );
-		flPRender -= floorf( flPRender );
-
-		// cycle01 drives the existing cl_bobup warp below. Vertical hits its
-		// minimum (gun dips) exactly on the footfall; lateral hits alternating
-		// extremes on alternating feet and crosses center mid-stride.
+		// The phase advances 2pi per stride (one vertical bob). Vertical hits
+		// its minimum (gun dips) exactly on the footfall; lateral is half the
+		// rate (one sway per two strides) so it hits alternating extremes on
+		// alternating feet and crosses center mid-stride. Both are taken
+		// straight from the phase, so both are perfectly continuous — the old
+		// parity flag flipped the side in a single frame at every footfall,
+		// snapping the gun sideways (the "jitter/flicker" while running).
 		// (cycle01 0.25/0.75 are the warp's sin extremes for cl_bobup 0.5.)
-		float flCycle01V = flPRender + 0.75f;
+		float flPhase = pBobState->m_flStepPhase / ( 2.0f * M_PI );	// vertical cycles
+		flPhase -= floorf( flPhase );
+		float flCycle01V = flPhase + 0.75f;
 		if ( flCycle01V >= 1.0f )
 			flCycle01V -= 1.0f;
-		float flCycle01L = flPRender * 0.5f + (float)( pBobState->m_nStepParity & 1 ) * 0.5f + 0.25f;
+
+		float flLateralPhase = pBobState->m_flStepPhase / ( 4.0f * M_PI );	// lateral, over 2 strides
+		flLateralPhase -= floorf( flLateralPhase );
+		float flCycle01L = flLateralPhase + 0.25f;
 		flCycle01L -= floorf( flCycle01L );
 
 		// don't allow too big speed changes
@@ -1799,7 +1828,7 @@ bool CWeaponCSBase::IsUseable()
 
 		float bob_offset = RemapVal( speed, 0.0f, 320.0f, 0.0f, 1.0f );
 
-		pBobState->m_flBobTime += (gpGlobals->curtime - pBobState->m_flLastBobTime) * bob_offset;
+		pBobState->m_flBobTime += flDt * bob_offset;
 		pBobState->m_flLastBobTime = gpGlobals->curtime;
 
 		// Heavier weapons bob slower: derive the cycle from max move speed.
@@ -1822,10 +1851,13 @@ bool CWeaponCSBase::IsUseable()
 			cycle = M_PI + M_PI*(cycle - cl_bobup.GetFloat()) / (1.0 - cl_bobup.GetFloat());
 		}
 
-		float flBobMultiplier = 0.00625f;
-		// if we're in the air, slow our bob down a bit
-		if ( player->GetGroundEntity() == NULL )
-			flBobMultiplier = 0.00125f;
+		// If we're in the air the bob is 5x weaker, but GetGroundEntity() can
+		// drop for a frame on steps, displacement edges and platforms. Switching
+		// the multiplier outright snapped the amplitude 5x (a flicker), so ease
+		// between the two over ~0.25s.
+		float flGroundTarget = ( player->GetGroundEntity() == NULL ) ? 0.0f : 1.0f;
+		pBobState->m_flBobGroundBlend = Approach( flGroundTarget, pBobState->m_flBobGroundBlend, flDt * 4.0f );
+		float flBobMultiplier = Lerp( pBobState->m_flBobGroundBlend, 0.00125f, 0.00625f );
 
 		pBobState->m_flVerticalBob = speed * (flBobMultiplier * cl_bobamt_vert.GetFloat());
 		pBobState->m_flVerticalBob = (pBobState->m_flVerticalBob*0.3 + pBobState->m_flVerticalBob*0.7*sin( cycle ));
