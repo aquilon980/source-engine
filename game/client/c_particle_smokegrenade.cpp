@@ -97,6 +97,7 @@ private:
 		float				m_FadeAlpha;		// Set as it moves around.
 		float				m_flSize;			// Base puff size (bloom + fade scale it).
 		float				m_flDensity;		// Per-puff opacity jitter (breaks the shell).
+		float				m_flSuppress;		// Smoothed carve suppression (0..1).
 		unsigned char		m_ColorInterp;		// Amount between min and max colors.
 		unsigned char		m_Color[4];
 	};
@@ -280,7 +281,7 @@ private:
 		float	flBirth;
 		float	flLife;			// seconds from birth to fully refilled
 	};
-	enum { MAX_CARVE_HOLES = 8 };
+	enum { MAX_CARVE_HOLES = 12 };
 	SmokeHole_t			m_CarveHoles[MAX_CARVE_HOLES];
 	int					m_nCarveHoles;
 
@@ -1030,11 +1031,17 @@ void C_ParticleSmokeGrenade::RenderParticles( CParticleRenderIterator *pIterator
 
 			// CS2-style reactive carve: punch a round hole you can see through.
 			// Test the card's drawn position, not its local-space grid slot.
-			if ( m_nCarveHoles > 0 )
+			// Holes are event-driven, so a full-auto burst used to pulse the
+			// cloud as each shot opened a fresh hole. Smooth the per-puff
+			// suppression instead: quick to open (a shot still reads
+			// instantly), slower to close, so a spray doesn't flicker.
 			{
-				float flHoleSuppress = HoleSuppressAt( renderPos, flSize );
-				if ( flHoleSuppress > 0.0f )
-					alpha *= ( 1.0f - flHoleSuppress );
+				SmokeGrenadeParticle *pMutable = const_cast<SmokeGrenadeParticle*>( pParticle );
+				float flHoleSuppress = ( m_nCarveHoles > 0 ) ? HoleSuppressAt( renderPos, flSize ) : 0.0f;
+				float flRate = ( flHoleSuppress > pMutable->m_flSuppress ) ? 16.0f : 5.0f;
+				pMutable->m_flSuppress = Approach( flHoleSuppress, pMutable->m_flSuppress, gpGlobals->frametime * flRate );
+				if ( pMutable->m_flSuppress > 0.0f )
+					alpha *= ( 1.0f - pMutable->m_flSuppress );
 			}
 
 			// TODO: optimize this whole routine!
@@ -1321,6 +1328,7 @@ void C_ParticleSmokeGrenade::FillVolume()
 							pParticle->m_CurRotation = FRand(-6, 6);
 							pParticle->m_flSize = SMOKEPARTICLE_SIZE * flScale * FRand( 0.7f, 1.3f );
 							pParticle->m_flDensity = FRand( 0.65f, 1.05f );
+							pParticle->m_flSuppress = 0.0f;
 
 							//debugoverlay->AddBoxOverlay( vMolded, Vector( -2, -2, -2), Vector( 2, 2, 2), vec3_angle, 255, 0, 0, 255, 5.0f );
 						}
@@ -1508,6 +1516,32 @@ void C_ParticleSmokeGrenade::CleanupToolRecordingState( KeyValues *msg )
 // closest to refilling is recycled when full.
 void C_ParticleSmokeGrenade::AddCarveHole( const Vector &vCenter, float flRadius, float flStrength, float flLife, bool bExplosion )
 {
+	// A full-auto burst used to add a brand-new hole per shot, so the cloud
+	// pulsed as holes popped open and the oldest slot got recycled onto a new
+	// spot. Merge a bullet into a nearby bullet hole instead: the spray keeps
+	// one hole open (and growing) for as long as the rounds land close, which
+	// is both the CS2 behaviour and the end of the flicker.
+	if ( !bExplosion )
+	{
+		for ( int i = 0; i < m_nCarveHoles; i++ )
+		{
+			SmokeHole_t &h = m_CarveHoles[i];
+			if ( h.bExplosion )
+				continue;
+
+			float flMergeDist = MAX( h.flRadius, flRadius ) * 0.9f;
+			if ( ( vCenter - h.vCenter ).Length() <= flMergeDist )
+			{
+				h.vCenter = vCenter;						// follow the spray
+				h.flRadius = MAX( h.flRadius, flRadius );
+				h.flStrength = MAX( h.flStrength, MIN( 1.0f, flStrength ) );
+				h.flBirth = gpGlobals->curtime;				// reset pop + full life
+				h.flLife = MAX( 0.05f, flLife );
+				return;
+			}
+		}
+	}
+
 	int nSlot;
 	if ( m_nCarveHoles < MAX_CARVE_HOLES )
 	{
