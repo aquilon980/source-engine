@@ -2658,7 +2658,6 @@ void CL_SetSteamCrashComment()
 	ConVarRef mat_forceaniso( "mat_forceaniso" );
 	ConVarRef mat_trilinear( "mat_trilinear" );
 	ConVarRef mat_antialias( "mat_antialias" );
-	ConVarRef mat_aaquality( "mat_aaquality" );
 	ConVarRef r_shadowrendertotexture( "r_shadowrendertotexture" );
 	ConVarRef r_flashlightdepthtexture( "r_flashlightdepthtexture" );
 #ifndef _X360
@@ -2673,7 +2672,7 @@ void CL_SetSteamCrashComment()
 #ifdef _X360
 	Q_snprintf( videoinfo, sizeof(videoinfo), "picmip: %i forceansio: %i trilinear: %i antialias: %i vsync: %i rootlod: %i reducefillrate: %i\n"\
 		"shadowrendertotexture: %i r_flashlightdepthtexture %i waterforcereflectentities: %i",
-										mat_picmip.GetInt(), mat_forceaniso.GetInt(), mat_trilinear.GetInt(), mat_antialias.GetInt(), mat_aaquality.GetInt(),
+										mat_picmip.GetInt(), mat_forceaniso.GetInt(), mat_trilinear.GetInt(), mat_antialias.GetInt(),
 										mat_vsync.GetInt(), r_rootlod.GetInt(), mat_reducefillrate.GetInt(), 
 										r_shadowrendertotexture.GetInt(), r_flashlightdepthtexture.GetInt(),
 										r_waterforcereflectentities.GetInt() );

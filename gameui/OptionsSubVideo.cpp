@@ -58,12 +58,6 @@ RatioToAspectMode_t g_RatioToAspectModes[] =
 	{	2,		1.0f },
 };
 
-struct AAMode_t
-{
-	int m_nNumSamples;
-	int m_nQualityLevel;
-};
-
 //-----------------------------------------------------------------------------
 // Purpose: list of valid dx levels
 //-----------------------------------------------------------------------------
@@ -291,80 +285,13 @@ public:
 		m_pTextureDetail->AddItem("#gameui_high", NULL);
 		m_pTextureDetail->AddItem("#gameui_ultra", NULL);
 
-		// Build list of MSAA and CSAA modes, based upon those which are supported by the device
-		//
-		// The modes that we've seen in the wild to date are as follows (in perf order, fastest to slowest)
-		//
-		//								2x	4x	6x	8x	16x	8x	16xQ
-		//		Texture/Shader Samples	1	1	1	1	1	1	1
-		//		Stored Color/Z Samples	2	4	6	4	4	8	8
-		//		Coverage Samples		2	4	6	8	16	8	16
-		//		MSAA or CSAA			M	M	M	C	C	M	C
-		//
-		//	The CSAA modes are nVidia only (added in the G80 generation of GPUs)
-		//
-		m_nNumAAModes = 0;
-		m_pAntialiasingMode = new ComboBox( this, "AntialiasingMode", 10, false );
-		m_pAntialiasingMode->AddItem("#GameUI_None", NULL);
-		m_nAAModes[m_nNumAAModes].m_nNumSamples = 1;
-		m_nAAModes[m_nNumAAModes].m_nQualityLevel = 0;
-		m_nNumAAModes++;
-
-		if ( materials->SupportsMSAAMode(2) )
-		{
-			m_pAntialiasingMode->AddItem("#GameUI_2X", NULL);
-			m_nAAModes[m_nNumAAModes].m_nNumSamples = 2;
-			m_nAAModes[m_nNumAAModes].m_nQualityLevel = 0;
-			m_nNumAAModes++;
-		}
-
-		if ( materials->SupportsMSAAMode(4) )
-		{
-			m_pAntialiasingMode->AddItem("#GameUI_4X", NULL);
-			m_nAAModes[m_nNumAAModes].m_nNumSamples = 4;
-			m_nAAModes[m_nNumAAModes].m_nQualityLevel = 0;
-			m_nNumAAModes++;
-		}
-
-		if ( materials->SupportsMSAAMode(6) )
-		{
-			m_pAntialiasingMode->AddItem("#GameUI_6X", NULL);
-			m_nAAModes[m_nNumAAModes].m_nNumSamples = 6;
-			m_nAAModes[m_nNumAAModes].m_nQualityLevel = 0;
-			m_nNumAAModes++;
-		}
-
-		if ( materials->SupportsCSAAMode(4, 2) )							// nVidia CSAA			"8x"
-		{
-			m_pAntialiasingMode->AddItem("#GameUI_8X_CSAA", NULL);
-			m_nAAModes[m_nNumAAModes].m_nNumSamples = 4;
-			m_nAAModes[m_nNumAAModes].m_nQualityLevel = 2;
-			m_nNumAAModes++;
-		}
-
-		if ( materials->SupportsCSAAMode(4, 4) )							// nVidia CSAA			"16x"
-		{
-			m_pAntialiasingMode->AddItem("#GameUI_16X_CSAA", NULL);
-			m_nAAModes[m_nNumAAModes].m_nNumSamples = 4;
-			m_nAAModes[m_nNumAAModes].m_nQualityLevel = 4;
-			m_nNumAAModes++;
-		}
-
-		if ( materials->SupportsMSAAMode(8) )
-		{
-			m_pAntialiasingMode->AddItem("#GameUI_8X", NULL);
-			m_nAAModes[m_nNumAAModes].m_nNumSamples = 8;
-			m_nAAModes[m_nNumAAModes].m_nQualityLevel = 0;
-			m_nNumAAModes++;
-		}
-
-		if ( materials->SupportsCSAAMode(8, 2) )							// nVidia CSAA			"16xQ"
-		{
-			m_pAntialiasingMode->AddItem("#GameUI_16XQ_CSAA", NULL);
-			m_nAAModes[m_nNumAAModes].m_nNumSamples = 8;
-			m_nAAModes[m_nNumAAModes].m_nQualityLevel = 2;
-			m_nNumAAModes++;
-		}
+		// Anti-aliasing is a single technique (see docs/anti-aliasing.md): the
+		// edge-directed software AA in the Engine_Post shader. There are no
+		// MSAA/CSAA modes any more, so the row is just Off / On, backed by
+		// mat_antialias.
+		m_pAntialiasingMode = new ComboBox( this, "AntialiasingMode", 2, false );
+		m_pAntialiasingMode->AddItem( "#GameUI_None", NULL );
+		m_pAntialiasingMode->AddItem( "Post AA", NULL );
 
 		m_pFilteringMode = new ComboBox( this, "FilteringMode", 6, false );
 		m_pFilteringMode->AddItem("#GameUI_Bilinear", NULL);
@@ -472,21 +399,6 @@ public:
 		combo->UpdateItem(iItem, newText, NULL);
 	}
 
-	int FindMSAAMode( int nAASamples, int nAAQuality )
-	{
-		// Run through the AA Modes supported by the device
-        for ( int nAAMode = 0; nAAMode < m_nNumAAModes; nAAMode++ )
-		{
-			// If we found the mode that matches what we're looking for, return the index
-			if ( ( m_nAAModes[nAAMode].m_nNumSamples == nAASamples) && ( m_nAAModes[nAAMode].m_nQualityLevel == nAAQuality) )
-			{
-				return nAAMode;
-			}
-		}
-
-		return 0;	// Didn't find what we're looking for, so no AA
-	}
-
 	MESSAGE_FUNC_PTR( OnTextChanged, "TextChanged", panel )
 	{
 		if ( panel == m_pDXLevel && RequiresRestart() )
@@ -534,8 +446,6 @@ public:
 		int nSkipLevels = pKeyValues->GetInt( "ConVar.mat_picmip", 0 );
 		int nAnisotropicLevel = pKeyValues->GetInt( "ConVar.mat_forceaniso", 8 );
 		int nForceTrilinear = pKeyValues->GetInt( "ConVar.mat_trilinear", 1 );
-		int nAASamples = pKeyValues->GetInt( "ConVar.mat_antialias", 0 );
-		int nAAQuality = pKeyValues->GetInt( "ConVar.mat_aaquality", 0 );
 		int nRenderToTextureShadows = pKeyValues->GetInt( "ConVar.r_shadowrendertotexture", 1 );
 		int nShadowDepthTextureShadows = pKeyValues->GetInt( "ConVar.r_flashlightdepthtexture", 1 );
 #ifndef _X360
@@ -595,9 +505,8 @@ public:
 			break;
 		}
 
-		// Map desired mode to list item number
-		int nMSAAMode = FindMSAAMode( nAASamples, nAAQuality );
-		SetComboItemAsRecommended( m_pAntialiasingMode, nMSAAMode );
+		// Anti-aliasing: the single technique is the recommended (and default) choice.
+		SetComboItemAsRecommended( m_pAntialiasingMode, 1 );
 
 		if ( nShadowDepthTextureShadows )
 			SetComboItemAsRecommended( m_pShadowDetail, 2 );	// Shadow depth mapping (in addition to RTT shadows)
@@ -687,10 +596,8 @@ public:
 			break;
 		}
 
-		// Set the AA convars according to the menu item chosen
-		int nActiveAAItem = m_pAntialiasingMode->GetActiveItem();
-		ApplyChangesToConVar( "mat_antialias", m_nAAModes[nActiveAAItem].m_nNumSamples );
-		ApplyChangesToConVar( "mat_aaquality", m_nAAModes[nActiveAAItem].m_nQualityLevel );
+		// Anti-aliasing: Off (0) or the single Post AA technique (1).
+		ApplyChangesToConVar( "mat_antialias", m_pAntialiasingMode->GetActiveItem() ? 1 : 0 );
 
 		if ( m_pShadowDetail->GetActiveItem() == 0 )						// Blobby shadows
 		{
@@ -755,7 +662,6 @@ public:
 		ConVarRef mat_trilinear( "mat_trilinear" );
 		ConVarRef mat_forceaniso( "mat_forceaniso" );
 		ConVarRef mat_antialias( "mat_antialias" );
-		ConVarRef mat_aaquality( "mat_aaquality" );
 		ConVarRef mat_vsync( "mat_vsync" );
 		ConVarRef mat_queue_mode( "mat_queue_mode" );
 		ConVarRef r_flashlightdepthtexture( "r_flashlightdepthtexture" );
@@ -815,14 +721,9 @@ public:
 			break;
 		}
 
-		// Map convar to item on AA drop-down
-		int nAASamples = mat_antialias.GetInt();
-		int nAAQuality = mat_aaquality.GetInt();
-		int nMSAAMode = FindMSAAMode( nAASamples, nAAQuality );
-		m_pAntialiasingMode->ActivateItem( nMSAAMode );
+		// Anti-aliasing: Off / Post AA, mapped from mat_antialias.
+		m_pAntialiasingMode->ActivateItem( mat_antialias.GetBool() ? 1 : 0 );
 	
-		m_pAntialiasingMode->SetEnabled( m_nNumAAModes > 1 );
-
 #ifndef _X360
 		if ( r_waterforceexpensive.GetBool() )
 #endif
@@ -933,9 +834,6 @@ private:
 	vgui::ComboBox *m_pShadowDetail, *m_pWaterDetail, *m_pVSync, *m_pMulticore, *m_pShaderDetail;
 	vgui::ComboBox *m_pColorCorrection;
 	vgui::ComboBox *m_pDXLevel;
-
-	int m_nNumAAModes;
-	AAMode_t m_nAAModes[16];
 };
 
 #if defined( USE_SDL )

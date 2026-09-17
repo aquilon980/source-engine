@@ -196,8 +196,6 @@ static const char *s_pRegistryConVars[] =
 	"r_waterforceexpensive",
 #endif
 	"r_waterforcereflectentities",
-	"mat_antialias",
-	"mat_aaquality",
 	"mat_specular",
 	"mat_bumpmap",
 	"mat_colorcorrection",
@@ -607,8 +605,6 @@ static void OverrideMaterialSystemConfigFromCommandLine( MaterialSystem_Config_t
 		config.SetFlag( MATSYS_VIDCFG_FLAGS_NO_WAIT_FOR_VSYNC, vsync == 0 );
 	}
 #endif
-	config.m_nAASamples = CommandLine()->ParmValue( "-mat_antialias", config.m_nAASamples );
-	config.m_nAAQuality = CommandLine()->ParmValue( "-mat_aaquality", config.m_nAAQuality );
 
 	// Clamp the requested dimensions to the display resolution
 	MaterialVideoMode_t videoMode;

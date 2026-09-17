@@ -1186,8 +1186,17 @@ static void SetToneMapScale(IMatRenderContext *pRenderContext, float newvalue, f
 // Engine_Post material proxy ============================================================================================
 //=====================================================================================================================
 
-static ConVar mat_software_aa_strength( "mat_software_aa_strength", "-1.0", FCVAR_ARCHIVE, "Software AA - perform a software anti-aliasing post-process (an alternative/supplement to MSAA). This value sets the strength of the effect: (0.0 - off), (1.0 - full)" );
-static ConVar mat_software_aa_quality( "mat_software_aa_quality", "0", FCVAR_ARCHIVE, "Software AA quality mode: (0 - 5-tap filter), (1 - 9-tap filter)" );
+// Anti-aliasing is the one and only AA technique in this build (see
+// docs/anti-aliasing.md). It is the edge-directed software AA built into the
+// Engine_Post shader (shipped bytecode; no MSAA). `mat_antialias` (defined in
+// the materialsystem) is the single master switch; the cvars below are the
+// hidden tuners. Defaults are tuned for Apple Silicon: strength 1.0, 9-tap.
+//
+// mat_software_aa_strength is NOT archived: the old X360-only code used to
+// archive a 0.0 here on non-X360 platforms, and an archived 0.0 would silently
+// neuter the new AA. It is also floor-clamped at use (<= 0 means "default").
+static ConVar mat_software_aa_strength( "mat_software_aa_strength", "1.0", 0, "Software AA - strength of the edge-directed post-process anti-aliasing (hidden tuner; mat_antialias is the on/off switch). <= 0 uses the default." );
+static ConVar mat_software_aa_quality( "mat_software_aa_quality", "1", FCVAR_ARCHIVE, "Software AA quality mode: (0 - 5-tap filter), (1 - 9-tap filter)" );
 static ConVar mat_software_aa_edge_threshold( "mat_software_aa_edge_threshold", "1.0", FCVAR_ARCHIVE, "Software AA - adjusts the sensitivity of the software AA shader's edge detection (default 1.0 - a lower value will soften more edges, a higher value will soften fewer)" );
 static ConVar mat_software_aa_blur_one_pixel_lines( "mat_software_aa_blur_one_pixel_lines", "0.5", FCVAR_ARCHIVE, "How much software AA should blur one-pixel thick lines: (0.0 - none), (1.0 - lots)" );
 static ConVar mat_software_aa_tap_offset( "mat_software_aa_tap_offset", "1.0", FCVAR_ARCHIVE, "Software AA - adjusts the displacement of the taps used by the software AA shader (default 1.0 - a lower value will make the image sharper, higher will make it blurrier)" );
@@ -2277,55 +2286,30 @@ void DoEnginePostProcessing( int x, int y, int w, int h, bool bFlashlightIsOn, b
 				DoPreBloomTonemapping( pRenderContext, x, y, w, h, flAutoExposureMin, flAutoExposureMax );
 			}
 
-			// Set software-AA on by default for 360
-			if ( mat_software_aa_strength.GetFloat() == -1.0f )
-			{
-				if ( IsX360() )
-				{
-					mat_software_aa_strength.SetValue( 1.0f );
-					if ( g_pMaterialSystem->GetCurrentConfigForVideoCard().m_VideoMode.m_Height > 480 )
-					{
-						mat_software_aa_quality.SetValue( 0 );
-					}
-					else
-					{
-						// For standard-def, we have fewer pixels so we can afford 'high quality' mode (5->9 taps/pixel)
-						mat_software_aa_quality.SetValue( 1 );
-					}
-				}
-				else
-				{
-					mat_software_aa_strength.SetValue( 0.0f );
-				}
-			}
+			// Anti-aliasing is on by default and driven by the single
+			// mat_antialias switch (materialsystem). The strength/quality cvars
+			// above are hidden tuners behind it.
+			static ConVarRef mat_antialias( "mat_antialias" );
 
-			// Same trick for setting up the vgui aa strength
-			if ( mat_software_aa_strength_vgui.GetFloat() == -1.0f )
-			{
-				if ( IsX360() && (g_pMaterialSystem->GetCurrentConfigForVideoCard().m_VideoMode.m_Height == 720) )
-				{
-					mat_software_aa_strength_vgui.SetValue( 2.0f );
-				}
-				else
-				{
-					mat_software_aa_strength_vgui.SetValue( 1.0f );
-				}
-			}
-
-			float flAAStrength;
-
-			// We do a second AA blur pass over the TF intro menus. use mat_software_aa_strength_vgui there instead
+			float flAAStrength = 0.0f;
 			if ( IsX360() && bPostVGui )
 			{
-				flAAStrength = mat_software_aa_strength_vgui.GetFloat();
+				// Second AA blur over the TF intro menus uses its own strength.
+				flAAStrength = ( mat_software_aa_strength_vgui.GetFloat() == -1.0f ) ? 1.0f : mat_software_aa_strength_vgui.GetFloat();
 			}
-			else
+			else if ( !mat_antialias.IsValid() || mat_antialias.GetBool() )
 			{
+				// A stale archived 0.0 (written by the old X360-only code) must
+				// not mean "off" — mat_antialias is the switch. <= 0 = default.
 				flAAStrength = mat_software_aa_strength.GetFloat();
+				if ( flAAStrength <= 0.0f )
+				{
+					flAAStrength = 1.0f;
+				}
 			}
 
 			// bloom, software-AA and colour-correction (applied in 1 pass, after generation of the bloom texture)
-			bool  bPerformSoftwareAA	= IsX360() && ( engine->GetDXSupportLevel() >= 90 ) && ( flAAStrength != 0.0f );
+			bool  bPerformSoftwareAA	= ( engine->GetDXSupportLevel() >= 90 ) && ( flAAStrength != 0.0f );
 			bool  bPerformBloom			= !bPostVGui && ( flBloomScale > 0.0f ) && ( engine->GetDXSupportLevel() >= 90 );
 			bool  bPerformColCorrect	= !bPostVGui && 
 										  ( g_pMaterialSystemHardwareConfig->GetDXSupportLevel() >= 90) &&

@@ -243,7 +243,6 @@ bool CSceneViewerApp::Create()
 			" -resizing . . . . Allow the window to be resized\n"
 			" -mat_vsync  . . . Wait for VSYNC\n"
 			" -mat_antialias  . Turn on Anti-Aliasing\n"
-			" -mat_aaquality  . Antialiasing quality (set to zero unless you know what you're doing)\n"
 			"\n"
 			);
 

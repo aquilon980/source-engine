@@ -1789,8 +1789,12 @@ static ConVar mat_monitorgamma_tv_enabled( "mat_monitorgamma_tv_enabled", "1", F
 static ConVar mat_monitorgamma_tv_enabled( "mat_monitorgamma_tv_enabled", "0", FCVAR_ARCHIVE, "" );
 #endif
 
-static ConVar mat_antialias(		"mat_antialias", "0", FCVAR_ARCHIVE );
-static ConVar mat_aaquality(		"mat_aaquality", "0", FCVAR_ARCHIVE );
+// Anti-aliasing is ONE post-process technique (see docs/anti-aliasing.md): the
+// edge-directed software AA in the Engine_Post shader. MSAA is gone, so this is
+// the single master switch: 0 = off, 1 = on. Bounded 0..1 so an old config.cfg
+// that still says mat_antialias "4" (a legacy MSAA sample count) clamps to 1
+// instead of being read as anything else.
+static ConVar mat_antialias(		"mat_antialias", "1", FCVAR_ARCHIVE, "Anti-aliasing: (0 - off), (1 - on). Post-process software AA.", true, 0, true, 1 );
 static ConVar mat_diffuse(			"mat_diffuse", "1", FCVAR_CHEAT );
 //=============================================================================
 // HPE_BEGIN:
@@ -1865,13 +1869,11 @@ void CMaterialSystem::ReadConfigFromConVars( MaterialSystem_Config_t *pConfig )
 	pConfig->m_fGammaTVExponent = mat_monitorgamma_tv_exp.GetFloat();
 	pConfig->m_bGammaTVEnabled = mat_monitorgamma_tv_enabled.GetBool();
 
-#ifdef TOGLES
+	// MSAA is removed entirely: never request multisampled samples, so no
+	// multisampled backbuffer is built. Anti-aliasing is the Engine_Post
+	// software AA pass instead (driven by mat_antialias in the client).
 	pConfig->m_nAASamples = 0;
-#else
-	pConfig->m_nAASamples = mat_antialias.GetInt();
-#endif
-
-	pConfig->m_nAAQuality = mat_aaquality.GetInt();
+	pConfig->m_nAAQuality = 0;
 	pConfig->bShowDiffuse = mat_diffuse.GetInt() ? true : false;	
 //	pConfig->bAllowCheats = false; // hack
 	pConfig->bShowNormalMap = mat_normalmaps.GetInt() ? true : false;
@@ -1954,8 +1956,6 @@ static const char *pConvarsAllowedInDXSupport[]={
 	"cl_ejectbrass",
 	"dsp_off",
 	"dsp_slow_cpu",
-	"mat_antialias",
-	"mat_aaquality",
 	"mat_bumpmap",
 	"mat_colorcorrection",
 	"mat_depthbias_decal",
@@ -2118,8 +2118,7 @@ void CMaterialSystem::WriteConfigIntoConVars( const MaterialSystem_Config_t &con
 	mat_monitorgamma_tv_exp.SetValue( config.m_fGammaTVExponent );
 	mat_monitorgamma_tv_enabled.SetValue( config.m_bGammaTVEnabled );
 
-	mat_antialias.SetValue( config.m_nAASamples );
-	mat_aaquality.SetValue( config.m_nAAQuality );
+	// mat_antialias is the client-side AA switch now, not derived from config.
 	mat_diffuse.SetValue( config.bShowDiffuse ? 1 : 0 );	
 //	config.bAllowCheats = false; // hack
 	mat_normalmaps.SetValue( config.bShowNormalMap ? 1 : 0 );
