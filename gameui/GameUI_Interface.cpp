@@ -381,12 +381,21 @@ int __stdcall SendShutdownMsgFunc(WHANDLE hwnd, int lparam)
 	return 1;
 }
 
+// Music is off by default (see docs/music-off.md): the CO pack's
+// sound/ui/gamestartup*.mp3 was the only music in the install, and this gates
+// the whole startup-music path at the source so no music file (pack, stock or
+// dropped-in) can play. Set gameui_startup_music 1 to bring it back.
+static ConVar gameui_startup_music( "gameui_startup_music", "0", FCVAR_ARCHIVE, "Play the menu startup music (0 = off)." );
+
 //-----------------------------------------------------------------------------
 // Purpose: Searches for GameStartup*.mp3 files in the sound/ui folder and plays one
 //-----------------------------------------------------------------------------
 void CGameUI::PlayGameStartupSound()
 {
 	if ( IsX360() )
+		return;
+
+	if ( !gameui_startup_music.GetBool() )
 		return;
 
 	if ( CommandLine()->FindParm( "-nostartupsound" ) )
