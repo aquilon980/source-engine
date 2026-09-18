@@ -520,43 +520,55 @@ void C_ParticleSmokeGrenade::Start(CParticleMgr *pParticleMgr, IPrototypeArgAcce
 
 void C_ParticleSmokeGrenade::ClientThink()
 {
-	if ( m_CurrentStage == 1 )
+	if ( m_CurrentStage != 1 )
+		return;
+
+	// "Am I in the cloud" is measured against the same squashed ellipsoid
+	// RenderParticles shades, normalised so flNorm == 1 at the shell. The old
+	// test was a sphere of radius m_ExpandRadius — but that is the cloud's
+	// *diameter* (2 x m_SpacingRadius), so the fog reached a full half-width
+	// past the smoke and started before you were anywhere near it.
+	Vector vLocal = MainViewOrigin() - m_SmokeBasePos;
+	vLocal.z /= MAX( 0.3f, m_flHeightScale );
+	float flNorm = vLocal.Length() / MAX( 1.0f, m_SpacingRadius );
+
+	const float flCore = 0.55f;		// fully fogged once buried past this
+	const float flShell = 1.15f;	// a little padding, so stepping in fogs
+	if ( flNorm >= flShell )
+		return;
+
+	float flIn = clamp( ( flShell - flNorm ) / ( flShell - flCore ), 0.0f, 1.0f );
+	flIn = flIn * flIn * ( 3.0f - 2.0f * flIn );	// smoothstep, no hard rim
+
+	// Median-patch fade: the overlay follows what a mid-dissolve patch shows,
+	// not the unstaggered global — otherwise the insider stays fogged while
+	// staring through a clear hole.
+	float flMedT = clamp( m_flFadeT * 1.35f - 0.175f, 0.0f, 1.0f );
+	float flFogAlpha = 1.0f - flMedT * flMedT * ( 3.0f - 2.0f * flMedT );
+
+	// Ramp with the bloom, so the fog can't appear before the cloud does.
+	if ( m_SpacingRadius > 0.0f )
+		flFogAlpha *= clamp( m_ExpandRadius / ( m_SpacingRadius * 2.0f ), 0.0f, 1.0f );
+
+	// A carve hole you're looking through clears the screen fog too (two-way
+	// carve). The bullet hole is a view cone anchored at the eye, so sample a
+	// few points along the *view ray*: testing only the cloud centre cleared
+	// the fog just when the hole happened to line up behind it, not when you
+	// shoot a hole in the smoke directly in front of you.
+	float flHole = 0.0f;
 	{
-		// Add our influence to the global smoke fog alpha.
-		
-		float testDist = (MainViewOrigin() - m_SmokeBasePos ).Length();
-
-		float fadeEnd = m_ExpandRadius;
-
-		// The center of the smoke cloud that always gives full fog overlay
-		float flCoreDistance = fadeEnd * 0.3;
-		
-		if(testDist < fadeEnd)
+		Vector vEye = MainViewOrigin();
+		Vector vFwd = MainViewForward();
+		float flReach = MAX( 1.0f, ( m_SmokeBasePos - vEye ).Length() );
+		for ( int i = 1; i <= 3; i++ )
 		{
-			// Median-patch fade: the overlay follows what a mid-dissolve
-			// patch shows, not the unstaggered global — otherwise the
-			// insider stays fogged while staring through a clear hole.
-			float flMedT = clamp( m_flFadeT * 1.35f - 0.175f, 0.0f, 1.0f );
-			float flFogAlpha = 1.0f - flMedT * flMedT * ( 3.0f - 2.0f * flMedT );
-			if ( m_SpacingRadius > 0.0f )
-				flFogAlpha *= m_ExpandRadius / (m_SpacingRadius*2);
-
-			// A carve hole you're looking through clears the screen fog too,
-			// so the insider sees out (two-way carve). Test the cloud centre
-			// against the live holes; the cone is anchored to the eye, so
-			// looking into the hole reads as suppression here.
-			flFogAlpha *= 1.0f - HoleSuppressAt( m_SmokeBasePos );
-
-			if( testDist < flCoreDistance )
-			{
-				EngineGetSmokeFogOverlayAlpha() += flFogAlpha;
-			}
-			else
-			{
-				EngineGetSmokeFogOverlayAlpha() += (1 - ( testDist - flCoreDistance ) / ( fadeEnd - flCoreDistance ) ) * flFogAlpha;
-			}
-		}	
+			Vector vSample = vEye + vFwd * ( flReach * ( i / 3.0f ) );
+			flHole = MAX( flHole, HoleSuppressAt( vSample ) );
+		}
 	}
+	flFogAlpha *= 1.0f - flHole;
+
+	EngineGetSmokeFogOverlayAlpha() += flFogAlpha * flIn;
 }
 
 

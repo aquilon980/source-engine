@@ -306,6 +306,7 @@ void CCSViewRender::PerformFlashbangEffect( const CViewSetup &view )
 // a carve-aware way — looking through a bullet/HE hole clears this too.
 //-----------------------------------------------------------------------------
 ConVar smoke_overlay_enable( "smoke_overlay_enable", "1", FCVAR_ARCHIVE, "CS:GO-style inside-smoke overlay (two-pass, gun stays readable). 0 = stock single-pass fog." );
+ConVar smoke_overlay_max( "smoke_overlay_max", "0.85", FCVAR_ARCHIVE, "Max opacity of the inside-smoke overlay (0 = clear, 1 = a solid grey wall).", true, 0.0f, true, 1.0f );
 
 void CCSViewRender::RenderSmokeOverlay( bool bPreViewModel )
 {
@@ -326,7 +327,10 @@ void CCSViewRender::RenderSmokeOverlay( bool bPreViewModel )
 	if ( m_nSmokeOverlayFrame != gpGlobals->framecount )
 	{
 		m_nSmokeOverlayFrame = gpGlobals->framecount;
-		float flTarget = clamp( g_SmokeFogOverlayAlpha, 0.0f, 1.0f );
+		// Cap below 1 on purpose: at full strength the pre-viewmodel pass
+		// replaced the whole screen with flat grey, so standing in smoke read
+		// as a grey card with no world or 3D smoke showing through at all.
+		float flTarget = clamp( g_SmokeFogOverlayAlpha, 0.0f, smoke_overlay_max.GetFloat() );
 		if ( flTarget < m_flSmokeOverlayAmount )
 		{
 			flTarget = Approach( flTarget, m_flSmokeOverlayAmount, gpGlobals->frametime * 4.5f );
@@ -342,7 +346,7 @@ void CCSViewRender::RenderSmokeOverlay( bool bPreViewModel )
 		return;
 
 	// CS:GO's textured overlay when the material is around (CSSO pack), else
-	// the stock fog card tinted milky to match our brighter smoke.
+	// the stock fog card tinted to match our puffs.
 	IMaterial *pMaterial = materials->FindMaterial( "effects/overlaysmoke", TEXTURE_GROUP_CLIENT_EFFECTS, true );
 	byte overlaycolor[4];
 	if ( pMaterial && !pMaterial->IsErrorMaterial() )
@@ -354,14 +358,14 @@ void CCSViewRender::RenderSmokeOverlay( bool bPreViewModel )
 		pMaterial = materials->FindMaterial( "particle/screenspace_fog", TEXTURE_GROUP_CLIENT_EFFECTS, true );
 		if ( !pMaterial )
 			return;
-		// Neutral milky grey (0.72), matching the puffs and the 3D fog overlay
-		// (smoke_fog_overlay.cpp uses 0.78). The old B=191 added a blue lift
-		// the volumetric rewrite otherwise removed.
-		overlaycolor[0] = overlaycolor[1] = overlaycolor[2] = 184;
+		// Neutral grey 0.62, matching the puffs' grade (they no longer sit at
+		// a flat 0.72/0.78, and the old B=191 blue lift is long gone).
+		overlaycolor[0] = overlaycolor[1] = overlaycolor[2] = 158;
 	}
 
-	// Post-viewmodel pass is half strength so the gun reads through the smoke.
-	overlaycolor[3] = (byte)( m_flSmokeOverlayAmount * ( bPreViewModel ? 255 : 128 ) );
+	// Post-viewmodel pass is lighter still so the gun reads through the smoke
+	// (0.35 vs the old 0.5 — the smoke reads the same, the gun is clearer).
+	overlaycolor[3] = (byte)( m_flSmokeOverlayAmount * ( bPreViewModel ? 255 : 89 ) );
 	render->ViewDrawFade( overlaycolor, pMaterial );
 }
 

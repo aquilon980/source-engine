@@ -59,7 +59,9 @@ void DrawSmokeFogOverlay()
 	tmZone( TELEMETRY_LEVEL0, TMZF_NONE, "%s", __FUNCTION__ );
 
 	// CS2 smoke reads neutral grey from inside, not blue — match the puffs.
-	g_SmokeFogOverlayColor.Init( 0.78, 0.78, 0.78 );
+	// (0.62 now that the puffs' grade carries real shading instead of being
+	// pinned flat at ~0.72; the old 0.78 was brighter than the cloud itself.)
+	g_SmokeFogOverlayColor.Init( 0.62, 0.62, 0.62 );
 	
 	CMatRenderContextPtr pRenderContext( materials );
 
