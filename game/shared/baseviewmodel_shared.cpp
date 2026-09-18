@@ -382,6 +382,11 @@ void CBaseViewModel::SendViewModelMatchingSequence( int sequence )
 #include "ivieweffects.h"
 
 ConVar viewmodel_recoil( "viewmodel_recoil", "1.0", FCVAR_ARCHIVE, "Amount of weapon recoil/aimpunch shown on the viewmodel (0 = steady gun)", true, 0.0f, true, 1.0f );
+
+// Viewmodel offset (CS:GO-style): shift the gun laterally off-centre. x is the
+// screen-horizontal axis (negative = left), applied to every weapon in
+// CalcViewModelView so one cvar covers them all. World units.
+ConVar cl_viewmodel_offset_x( "cl_viewmodel_offset_x", "-2", FCVAR_ARCHIVE, "Viewmodel horizontal offset in world units (negative = left).", true, -20.0f, true, 20.0f );
 #endif
 
 #ifdef CSTRIKE_DLL
@@ -448,6 +453,15 @@ void CBaseViewModel::CalcViewModelView( CBasePlayer *owner, const Vector& eyePos
 		vmangles += owner->GetFreeAimOffset();
 	}
 #endif
+
+	// Viewmodel lateral offset (all weapons): shift along the camera's right
+	// axis so the gun can sit off-centre like CS:GO's viewmodel_offset_x.
+	// Uses the unmodified camera angles, so recoil/free-aim tilt doesn't skew it.
+	{
+		Vector vRight;
+		AngleVectors( eyeAngles, NULL, &vRight, NULL );
+		vmorigin += vRight * cl_viewmodel_offset_x.GetFloat();
+	}
 
 	SetLocalOrigin( vmorigin );
 	SetLocalAngles( vmangles );
