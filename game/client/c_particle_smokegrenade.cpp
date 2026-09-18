@@ -1099,6 +1099,13 @@ void C_ParticleSmokeGrenade::RenderParticles( CParticleRenderIterator *pIterator
 				// opaque quad (defeats the see-through hole). Stock did this.
 				alpha *= GetAlphaDistanceFade( tRenderPos, 0, 10 );
 
+				// The per-puff density jitter reaches 1.05 (see FillVolume), so
+				// a fully-dense core puff can land above 1.0. RenderParticle_*
+				// casts alpha * 254.9 straight to an unsigned char, so anything
+				// over 1 wraps to a near-zero alpha and the puff drops out —
+				// sprinkling permanent holes through the dense core. Clamp.
+				alpha = clamp( alpha, 0.0f, 1.0f );
+
 				if ( alpha > 0.001f )
 				{
 					RenderParticle_ColorSizeAngle(
