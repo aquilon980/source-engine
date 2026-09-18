@@ -1613,7 +1613,10 @@ static void SimulateFreeAim( C_CSPlayer *pPlayer, float flFrameTime, CUserCmd *p
 		// (reload done, unzoom, respawn) never snaps.
 		pPlayer->m_angFreeAim = pCmd->viewangles;
 		pPlayer->m_angFreeAimCamera = pCmd->viewangles;
-		pCmd->freeaim_angles = pCmd->viewangles;
+		// Zero, not viewangles: ReadUsercmd() zeroes the field on the same
+		// invalid flag, and GetChecksum() hashes it — keeping the local struct
+		// identical to the wire-decoded one avoids a future checksum mismatch.
+		pCmd->freeaim_angles.Init();
 		pCmd->freeaim_valid = false;
 		return;
 	}

@@ -493,10 +493,12 @@ void C_ParticleSmokeGrenade::Start(CParticleMgr *pParticleMgr, IPrototypeArgAcce
 		FillVolume();
 	}
 
-	// Go straight into "fill volume" mode if they want.
+	// Go straight into "fill volume" mode if they want. Guarded on
+	// m_bVolumeFilled so the particle-editor path (stage 2 AND -FillVolume)
+	// can't fill twice and leak a second, untracked 216-particle grid.
 	if(pArgs)
 	{
-		if(pArgs->FindArg("-FillVolume"))
+		if(pArgs->FindArg("-FillVolume") && !m_bVolumeFilled)
 		{
 			FillVolume();
 		}
@@ -1212,8 +1214,13 @@ void C_ParticleSmokeGrenade::FillVolume()
 			float flHzFit = MAX( 30.0f, ( flAvail - 24.0f ) * 0.5f );
 			if ( flHzFit < flHz )
 			{
-				m_flHeightScale = flHzFit / m_SpacingRadius;
-				flHz = flHzFit;
+				// Clamp the scale where it is stored: RenderParticles derives its
+				// alpha metric from MAX( 0.3, m_flHeightScale ), so a raw 0.28
+				// under a very low ceiling would draw geometry squashed more
+				// than the falloff that shapes it. flHz follows the clamped
+				// scale so the ground lift stays consistent.
+				m_flHeightScale = MAX( 0.3f, flHzFit / m_SpacingRadius );
+				flHz = m_flHeightScale * m_SpacingRadius;
 			}
 		}
 

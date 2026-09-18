@@ -229,21 +229,9 @@ public:
 	void OnOpenOptionsDialog_Xbox();
 	void OnOpenLoadCommentaryDialog();
 	void OpenLoadSingleplayerCommentaryDialog();
-	void OnOpenAchievementsDialog();
-
-    //=============================================================================
-    // HPE_BEGIN:
-    // [dwenger] Specific code for CS Achievements Display
-    //=============================================================================
-
-    // $TODO(HPE): Move this to a game-specific location
-    void OnOpenCSAchievementsDialog();
-
-    //=============================================================================
-    // HPE_END
-    //=============================================================================
-
-    void OnOpenAchievementsDialog_Xbox();
+	// (achievements-off tune: OnOpenAchievementsDialog / OnOpenCSAchievementsDialog
+	// / OnOpenAchievementsDialog_Xbox and m_hAchievementsDialog are gone — see
+	// docs/menu-cleanup.md. The base panel has no achievements entry point.)
 	void OnOpenControllerDialog();
 
 	// Xbox 360
@@ -379,7 +367,6 @@ private:
 	vgui::DHANDLE<vgui::Frame> m_hChangeGameDialog;
 	vgui::DHANDLE<vgui::Frame> m_hPlayerListDialog;
 	vgui::DHANDLE<vgui::Frame> m_hLoadCommentaryDialog;
-	vgui::DHANDLE<vgui::Frame> m_hAchievementsDialog;
 
 	// Xbox 360
 	vgui::DHANDLE<vgui::Frame> m_hMatchmakingBasePanel;

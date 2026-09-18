@@ -1994,14 +1994,8 @@ void CBasePanel::OnGameUIActivated()
 		}
  		else
 		{
-			RunMenuCommand( "OpenMatchmakingBasePanel" );
+ 			RunMenuCommand( "OpenMatchmakingBasePanel" );
  		}
-
-		if ( m_hAchievementsDialog.Get() )
-		{
-			// Achievement dialog refreshes it's data if the player looks at the pause menu
-			m_hAchievementsDialog->OnCommand( "OnGameUIActivated" );
-		}
 	}
 	else // not the pause menu, update presence
 	{
@@ -2112,58 +2106,12 @@ void CBasePanel::RunMenuCommand(const char *command)
 	{
 		OnOpenMatchmakingBasePanel();
 	}
-	else if ( !Q_stricmp( command, "OpenAchievementsDialog" ) )
-	{
-		if ( IsPC() )
-		{
-#ifndef NO_STEAM
-			if ( !steamapicontext->SteamUser() || !steamapicontext->SteamUser()->BLoggedOn() )
-			{
-				vgui::MessageBox *pMessageBox = new vgui::MessageBox("#GameUI_Achievements_SteamRequired_Title", "#GameUI_Achievements_SteamRequired_Message", this);
-				pMessageBox->DoModal();
-				return;
-			}
-#endif
-			OnOpenAchievementsDialog();
-		}
-		else
-		{
-			OnOpenAchievementsDialog_Xbox();
-		}
-	}
-    //=============================================================================
-    // HPE_BEGIN:
-    // [dwenger] Use cs-specific achievements dialog
-    //=============================================================================
-
-    else if ( !Q_stricmp( command, "OpenCSAchievementsDialog" ) )
-    {
-        if ( IsPC() )
-        {
-            if ( !steamapicontext->SteamUser() || !steamapicontext->SteamUser()->BLoggedOn() )
-            {
-                vgui::MessageBox *pMessageBox = new vgui::MessageBox("#GameUI_Achievements_SteamRequired_Title", "#GameUI_Achievements_SteamRequired_Message", this );
-                pMessageBox->DoModal();
-                return;
-            }
-
-			OnOpenCSAchievementsDialog();
-        }
-    }
-    //=============================================================================
-    // HPE_END
-    //=============================================================================
-
-	else if ( !Q_stricmp( command, "AchievementsDialogClosing" ) )
-	{
-		if ( IsX360() )
-		{
-			if ( m_hAchievementsDialog.Get() )
-			{
-				m_hAchievementsDialog->Close();
-			}
-		}
-	}
+	// Achievements-off tune (see docs/menu-cleanup.md): the main menu never
+	// shows the button (RecursiveLoadGameMenu skips it) and the dialog handlers
+	// used to remain reachable from the console via
+	// `gamemenucommand OpenCSAchievementsDialog`, which re-opened the whole
+	// achievements UI. The branches are deleted, not just hidden, so there is
+	// no path back in.
 	else if ( !Q_stricmp( command, "Quit" ) )
 	{
 		OnOpenQuitConfirmationDialog();
@@ -3345,64 +3293,6 @@ void CBasePanel::OpenLoadSingleplayerCommentaryDialog()
 
 	((CNewGameDialog *)m_hNewGameDialog.Get())->SetCommentaryMode( true );
 	m_hNewGameDialog->Activate();
-}
-
-//-----------------------------------------------------------------------------
-// Purpose: 
-//-----------------------------------------------------------------------------
-void CBasePanel::OnOpenAchievementsDialog()
-{
-	if (!m_hAchievementsDialog.Get())
-	{
-		m_hAchievementsDialog = new CAchievementsDialog( this );
-		PositionDialog(m_hAchievementsDialog);
-	}
-	m_hAchievementsDialog->Activate();
-}
-
-//=============================================================================
-// HPE_BEGIN:
-// [dwenger] Use cs-specific achievements dialog
-//=============================================================================
-
-void CBasePanel::OnOpenCSAchievementsDialog()
-{
-    if ( GameClientExports() )
-    {
-		int screenWide = 0;
-		int screenHeight = 0;
-		engine->GetScreenSize( screenWide, screenHeight );
-
-		// [smessick] For lower resolutions, open the Steam achievements instead of the CSS achievements screen.
-		if ( screenWide < GameClientExports()->GetAchievementsPanelMinWidth() )
-		{
-			ISteamFriends *friends = steamapicontext->SteamFriends();
-			if ( friends )
-			{
-				friends->ActivateGameOverlay( "Achievements" );
-			}
-		}
-		else
-		{
-			// Display the CSS achievements screen.
-			GameClientExports()->CreateAchievementsPanel( this );
-			GameClientExports()->DisplayAchievementPanel();
-		}
-    }
-}
-
-//=============================================================================
-// HPE_END
-//=============================================================================
-
-void CBasePanel::OnOpenAchievementsDialog_Xbox()
-{
-	if (!m_hAchievementsDialog.Get())
-	{
-		m_hAchievementsDialog = new CAchievementsDialog_XBox( this );
-		PositionDialog(m_hAchievementsDialog);
-	}
-	m_hAchievementsDialog->Activate();
 }
 
 //-----------------------------------------------------------------------------
@@ -4881,9 +4771,6 @@ void CBasePanel::CloseBaseDialogs( void )
 	if ( m_hNewGameDialog.Get() )
 		m_hNewGameDialog->Close();
 
-	if ( m_hAchievementsDialog.Get() )
-		m_hAchievementsDialog->Close();
-	
 	if ( m_hBonusMapsDialog.Get() )
 		m_hBonusMapsDialog->Close();
 	

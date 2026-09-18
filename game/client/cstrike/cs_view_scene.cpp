@@ -354,8 +354,10 @@ void CCSViewRender::RenderSmokeOverlay( bool bPreViewModel )
 		pMaterial = materials->FindMaterial( "particle/screenspace_fog", TEXTURE_GROUP_CLIENT_EFFECTS, true );
 		if ( !pMaterial )
 			return;
-		overlaycolor[0] = overlaycolor[1] = 184; // milky 0.72 to match the volumetric puffs
-		overlaycolor[2] = 191;
+		// Neutral milky grey (0.72), matching the puffs and the 3D fog overlay
+		// (smoke_fog_overlay.cpp uses 0.78). The old B=191 added a blue lift
+		// the volumetric rewrite otherwise removed.
+		overlaycolor[0] = overlaycolor[1] = overlaycolor[2] = 184;
 	}
 
 	// Post-viewmodel pass is half strength so the gun reads through the smoke.

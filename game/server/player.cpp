@@ -576,7 +576,8 @@ CBasePlayer::CBasePlayer( )
 	m_flFlashTime = -1;
 	pl.fixangle = FIXANGLE_ABSOLUTE;
 	pl.hltv = false;
-	pl.replay = false;	pl.frags = 0;
+	pl.replay = false;
+	pl.frags = 0;
 	pl.deaths = 0;
 
 	m_szNetname[0] = '\0';

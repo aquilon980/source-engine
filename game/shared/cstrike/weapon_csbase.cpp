@@ -1124,8 +1124,11 @@ bool CWeaponCSBase::AllowsFreeAim() const
 		case 0:
 		default:
 			{
-				// static crosshair
-				float fSpread = (GetCSWpnData().m_fSpread[m_weaponMode] + GetCSWpnData().m_fInaccuracyStand[m_weaponMode]) * 320.0f / tanf(fHalfFov);
+				// static crosshair — still static (it must not grow with movement
+				// or shots), but the raw CSWpnData values bypassed
+				// weapon_spread_scale, so the crosshair sat at full stock spread
+				// while the bullets were already lasers. Scale the base values.
+				float fSpread = (GetCSWpnData().m_fSpread[m_weaponMode] + GetCSWpnData().m_fInaccuracyStand[m_weaponMode]) * weapon_spread_scale.GetFloat() * 320.0f / tanf(fHalfFov);
 				iCrosshairDistance = MAX( 0, RoundFloatToInt( YRES( fSpread * cl_crosshairspreadscale.GetFloat() ) ) );
 			}
 			break;
@@ -1904,7 +1907,10 @@ bool CWeaponCSBase::IsUseable()
 		AngleVectors( player->EyeAngles(), &vViewFwd, &vViewRight, NULL );
 		float flStrafe = clamp( DotProduct( vVel, vViewRight ) / 250.0f, -1.0f, 1.0f );
 		float flStrafeTiltTarget = flStrafe * cl_viewmodel_strafe_tilt.GetFloat();
-		pBobState->m_flStrafeTilt = Lerp( clamp( flDt * 10.0f, 0.0f, 1.0f ), flStrafeTiltTarget, pBobState->m_flStrafeTilt );
+		// Lerp( percent, current, target ) eases current toward target. The two
+		// value arguments were swapped, which made p=1 (dt >= 0.1s) a no-op and
+		// p->0 (very high fps) a snap — the opposite of the ~0.1s lag intended.
+		pBobState->m_flStrafeTilt = Lerp( clamp( flDt * 10.0f, 0.0f, 1.0f ), pBobState->m_flStrafeTilt, flStrafeTiltTarget );
 
 		//NOTENOTE: We don't use this return value in our case (need to restructure the calculation function setup!)
 		return 0.0f;
