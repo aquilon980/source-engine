@@ -314,6 +314,7 @@ void ReadUsercmd( bf_read *buf, CUserCmd *move, CUserCmd *from )
 	else
 	{
 		move->freeaim_valid = false;
+		move->freeaim_angles.Init();	// keep the invariant: meaningless when invalid
 	}
 
 #if defined( HL2_DLL )

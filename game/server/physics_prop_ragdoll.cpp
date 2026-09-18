@@ -1478,7 +1478,7 @@ void CRagdollPropAttached::Detach()
 		m_ragdoll.list[i].pObject->GetDamping( &damping, &rotdamping );
 		damping *= dampingScale;
 		rotdamping *= dampingScale;
-		m_ragdoll.list[i].pObject->SetDamping( &damping, &damping );
+		m_ragdoll.list[i].pObject->SetDamping( &damping, &rotdamping );
 	}
 
 	// Go non-solid

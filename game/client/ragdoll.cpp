@@ -272,7 +272,7 @@ void CRagdoll::PhysForceRagdollToSleep()
 }
 
 #define RAGDOLL_SLEEP_TOLERANCE	1.0f
-static ConVar ragdoll_sleepaftertime( "ragdoll_sleepaftertime", "3.0f", 0, "After this many seconds of being basically stationary, the ragdoll will go to sleep. Heavier-corpses tune: 3s so bodies settle fast." );
+static ConVar ragdoll_sleepaftertime( "ragdoll_sleepaftertime", "3.0f", FCVAR_ARCHIVE, "After this many seconds of being basically stationary, the ragdoll will go to sleep. Heavier-corpses tune: 3s so bodies settle fast." );
 
 void CRagdoll::CheckSettleStationaryRagdoll()
 {
