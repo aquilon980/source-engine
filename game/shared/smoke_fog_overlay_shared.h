@@ -12,7 +12,7 @@
 // ID-block radius (see c_cs_player.cpp), which must not follow the visuals.
 #define SMOKEGRENADE_PARTICLERADIUS	80
 #define SMOKEPARTICLE_OVERLAP		44
-#define SMOKEPARTICLE_SIZE			46
+#define SMOKEPARTICLE_SIZE			42
 
 
 #endif

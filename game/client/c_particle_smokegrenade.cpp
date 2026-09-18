@@ -56,7 +56,7 @@ static ConVar smoke_reactive_enable( "smoke_reactive_enable", "1", FCVAR_ARCHIVE
 static ConVar smoke_bullet_radius( "smoke_bullet_radius", "20", FCVAR_ARCHIVE, "Radius around a bullet path that thins smoke.", true, 4.0f, true, 160.0f );
 static ConVar smoke_bullet_strength( "smoke_bullet_strength", "1.0", FCVAR_ARCHIVE, "How much smoke one bullet clears (0-1).", true, 0.0f, true, 1.0f );
 static ConVar smoke_bullet_recover( "smoke_bullet_recover", "1.4", FCVAR_ARCHIVE, "Seconds for a bullet hole to refill.", true, 0.2f, true, 10.0f );
-static ConVar smoke_he_radius( "smoke_he_radius", "290", FCVAR_ARCHIVE, "Radius of the HE smoke clear.", true, 50.0f, true, 800.0f );
+static ConVar smoke_he_radius( "smoke_he_radius", "160", FCVAR_ARCHIVE, "Radius of the HE smoke clear.", true, 50.0f, true, 800.0f );
 static ConVar smoke_he_strength( "smoke_he_strength", "1.0", FCVAR_ARCHIVE, "How much smoke an HE blast clears (0-1).", true, 0.0f, true, 1.0f );
 static ConVar smoke_he_recover( "smoke_he_recover", "3.0", FCVAR_ARCHIVE, "Seconds for HE-cleared smoke to refill.", true, 0.5f, true, 15.0f );
 
@@ -65,7 +65,7 @@ static ConVar smoke_he_recover( "smoke_he_recover", "3.0", FCVAR_ARCHIVE, "Secon
 // patchily instead of shrinking as a ball. Client-only visuals.
 static ConVar smoke_mold_enable( "smoke_mold_enable", "1", FCVAR_ARCHIVE, "Smoke molds to the ground/walls instead of clipping through them." );
 static ConVar smoke_bloom_time( "smoke_bloom_time", "1.4", FCVAR_ARCHIVE, "Seconds for the smoke cloud to bloom to full size.", true, 0.5f, true, 3.0f );
-static ConVar smoke_core( "smoke_core", "0.50", FCVAR_ARCHIVE, "Fraction of the cloud that stays fully dense (soft edge outside it).", true, 0.2f, true, 0.8f );
+static ConVar smoke_core( "smoke_core", "0.42", FCVAR_ARCHIVE, "Fraction of the cloud that stays fully dense (soft edge outside it).", true, 0.2f, true, 0.8f );
 static ConVar smoke_brightness( "smoke_brightness", "1.0", FCVAR_ARCHIVE, "Smoke puff brightness multiplier.", true, 0.4f, true, 1.6f );
 static ConVar smoke_scale( "smoke_scale", "1.0", FCVAR_ARCHIVE, "Smoke cloud size multiplier at detonation (0.6-1.4).", true, 0.6f, true, 1.4f );
 static ConVar smoke_debug( "smoke_debug", "0", FCVAR_NONE, "Print smoke carve diagnostics to the console." );
@@ -903,7 +903,11 @@ float C_ParticleSmokeGrenade::HoleSuppressAt( const Vector &vWorldPos, float flP
 			float flClear = ( h.flRadius + flPuffRadius ) - flDist;
 			if ( flClear <= 0.0f )
 				continue;
-			float flS = clamp( flClear / MAX( 1.0f, h.flRadius * 0.3f ), 0.0f, 1.0f );
+			// Feather over the outer half of the blast (was 30%): with the
+			// clear radius near the cloud's own size the old narrow shell was
+			// fully saturated across the whole cloud, so an HE wiped it out
+			// instead of biting a visible round hole into it.
+			float flS = clamp( flClear / MAX( 1.0f, h.flRadius * 0.5f ), 0.0f, 1.0f );
 			flBest = MAX( flBest, flS * h.flStrength * flPop * flFade );
 			continue;
 		}
@@ -1071,16 +1075,19 @@ void C_ParticleSmokeGrenade::RenderParticles( CParticleRenderIterator *pIterator
 
 			// Grey floor: CS2 smoke stays grey even under a bridge —
 			// slightly cool, never soot. Warm-tinted maps shouldn't paint
-			// the cloud orange; this pins the base channel at grey.
-			color.x = MAX( color.x, 0.62f );
-			color.y = MAX( color.y, 0.62f );
-			color.z = MAX( color.z, 0.62f );
+			// the cloud orange; this pins the base channel at grey. Kept
+			// low enough that map lighting still reads: at 0.62 the floor
+			// swallowed nearly every indoor light value and the cloud came
+			// out a flat single grey with no top/bottom/edge shading.
+			color.x = MAX( color.x, 0.45f );
+			color.y = MAX( color.y, 0.45f );
+			color.z = MAX( color.z, 0.45f );
 
 			// Kill residual hue: CS2 smoke is neutral grey. Lighting tints
-			// the puffs, so unify hard toward luminance (85%) with a tiny
-			// breath of ambient left.
+			// the puffs, so unify toward luminance — but only gently, or it
+			// flattens the shading the floor above just let through.
 			float flLum = color.x * 0.3f + color.y * 0.59f + color.z * 0.11f;
-			color += (Vector( flLum, flLum, flLum ) - color) * 0.8f;
+			color += (Vector( flLum, flLum, flLum ) - color) * 0.6f;
 			color.x = clamp( color.x, 0.0f, 1.0f );
 			color.y = clamp( color.y, 0.0f, 1.0f );
 			color.z = clamp( color.z, 0.0f, 1.0f );
