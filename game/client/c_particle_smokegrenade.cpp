@@ -406,6 +406,10 @@ C_ParticleSmokeGrenade::C_ParticleSmokeGrenade()
 {
 	memset(m_MaterialHandles, 0, sizeof(m_MaterialHandles));
 
+	// Update() builds the bbox from this even at stage 0, before FillVolume()
+	// assigns it — Vector() does not zero, so one frame of garbage otherwise.
+	m_SmokeBasePos.Init();
+
 	// Volumetric look (see docs/smoke-volumetric.md): bright CS2-style grey
 	// with a faint cool lift. World lighting tints it per-puff at spawn.
 	m_MinColor.Init(0.86, 0.86, 0.86);
@@ -693,6 +697,12 @@ void C_ParticleSmokeGrenade::UpdateParticleAndFindTrade( int iParticle, float fT
 void C_ParticleSmokeGrenade::Update(float fTimeDelta)
 {
 	float flLifetime = gpGlobals->curtime - m_flSpawnTime;
+
+	// Turning the reactive system off must drop any live holes too, or an
+	// existing tunnel keeps suppressing puffs for its full 1.4-3s lifetime
+	// while the cvar reads 0 (docs/smoke-reactive.md promises "never punch").
+	if ( !smoke_reactive_enable.GetBool() )
+		m_nCarveHoles = 0;
 
 	// Update the smoke trail.
 	UpdateSmokeTrail( fTimeDelta );
@@ -1082,14 +1092,22 @@ void C_ParticleSmokeGrenade::RenderParticles( CParticleRenderIterator *pIterator
 			// Draw if there is any alpha left; a carve hole can clear a puff.
 			if ( alpha > 0.001f )
 			{
-			RenderParticle_ColorSizeAngle(
-				pIterator->GetParticleDraw(),
-				tRenderPos,
-				color,
-				alpha,
-				flSize,
-				pParticle->m_CurRotation
-				);
+				// Fade a card that is right on top of the eye, or standing in
+				// the cloud draws the nearest 92u billboard as a full-screen
+				// opaque quad (defeats the see-through hole). Stock did this.
+				alpha *= GetAlphaDistanceFade( tRenderPos, 0, 10 );
+
+				if ( alpha > 0.001f )
+				{
+					RenderParticle_ColorSizeAngle(
+						pIterator->GetParticleDraw(),
+						tRenderPos,
+						color,
+						alpha,
+						flSize,
+						pParticle->m_CurRotation
+						);
+				}
 			}
 		}
 
@@ -1327,7 +1345,7 @@ void C_ParticleSmokeGrenade::FillVolume()
 						if(pParticle)
 						{
 							pParticle->m_Pos = vMolded - m_SmokeBasePos; // store its position in local space
-							pParticle->m_ColorInterp = (unsigned char)((rand() * 255) / VALVE_RAND_MAX);
+							pParticle->m_ColorInterp = (unsigned char)( rand() % 256 );
 							pParticle->m_RotationSpeed = FRand(-ROTATION_SPEED, ROTATION_SPEED); // Rotation speed.
 							pParticle->m_CurRotation = FRand(-6, 6);
 							pParticle->m_flSize = SMOKEPARTICLE_SIZE * flScale * FRand( 0.7f, 1.3f );
@@ -1603,10 +1621,10 @@ void C_ParticleSmokeGrenade::ApplyBulletSegment( const Vector &vecStart, const V
 	// Bullet: clear every card whose world footprint covers the opening.
 	// HoleSuppressAt feeds each puff its rendered half-size so neighbours
 	// can't overdraw the gap shut (see docs/smoke-reactive.md).
+	AddCarveHole( vCenter, flRadius, flStrength, MAX( 0.2f, smoke_bullet_recover.GetFloat() ), false );
 	if ( smoke_debug.GetBool() )
 		Msg( "[smoke] bullet hole at (%.0f %.0f %.0f) r=%.0f, %d hole(s) live\n",
 			vCenter.x, vCenter.y, vCenter.z, flRadius, m_nCarveHoles );
-	AddCarveHole( vCenter, flRadius, flStrength, MAX( 0.2f, smoke_bullet_recover.GetFloat() ), false );
 }
 
 
