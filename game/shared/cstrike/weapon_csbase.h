@@ -31,6 +31,10 @@ extern int GetShellForAmmoType( const char *ammoname );
 // covers every gun (see docs/casual-defaults.md).
 extern ConVar weapon_recoil_scale;
 
+// Defined in weapon_csbase.cpp. Shotgun GetSpread overrides (M3/XM1014) read
+// this directly; every other gun flows through CWeaponCSBase::GetSpread.
+extern ConVar weapon_spread_scale;
+
 #define SHIELD_VIEW_MODEL "models/weapons/v_shield.mdl"
 #define SHIELD_WORLD_MODEL "models/weapons/w_shield.mdl"
 

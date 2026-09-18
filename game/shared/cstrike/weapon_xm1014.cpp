@@ -93,10 +93,12 @@ float CWeaponXM1014::GetInaccuracy() const
 
 float CWeaponXM1014::GetSpread() const
 {
+	// Shotguns override GetSpread, so the base-class scale never reached them
+	// (weapon_spread_scale 0 left pellets at full spread). Apply it here too.
 	if ( weapon_accuracy_model.GetInt() == 1 )
-		return 0.0725f;
+		return 0.0725f * weapon_spread_scale.GetFloat();
 
-	return GetCSWpnData().m_fSpread[Primary_Mode];
+	return GetCSWpnData().m_fSpread[Primary_Mode] * weapon_spread_scale.GetFloat();
 }
 
 void CWeaponXM1014::PrimaryAttack()
