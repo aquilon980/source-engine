@@ -440,10 +440,11 @@ void CCSPlayer::FireBullet(
 		lastPlayerHit = ToBasePlayer(tr.m_pEnt);
 
 #ifdef CLIENT_DLL
-		// CS2-style reactive smoke (see docs/smoke-reactive.md): every bullet
+		// CS2-style reactive smoke (see docs/smoke-cs2-audit.md): every bullet
 		// segment carves a short-lived tunnel through smoke, hits or misses.
-		extern void ReactiveSmoke_OnBulletSegment( const Vector &vecStart, const Vector &vecEnd );
-		ReactiveSmoke_OnBulletSegment( vecSrc, tr.endpos );
+		// iDamage sizes the hole by caliber (AWP/Deagle big, SMG tiny).
+		extern void ReactiveSmoke_OnBulletSegment( const Vector &vecStart, const Vector &vecEnd, int iDamage );
+		ReactiveSmoke_OnBulletSegment( vecSrc, tr.endpos, iDamage );
 #endif
 
 		if ( tr.fraction == 1.0f )

@@ -21,16 +21,19 @@
 
 #define SMOKESPHERE_EXPAND_TIME		1		// Take N seconds to expand to SMOKESPHERE_MAX_RADIUS.
 
-#define NUM_PARTICLES_PER_DIMENSION 6
+#define NUM_PARTICLES_PER_DIMENSION 9
 
 // SMOKEGRENADE_PARTICLERADIUS / SMOKEPARTICLE_OVERLAP / SMOKEPARTICLE_SIZE
 // come from smoke_fog_overlay_shared.h (one definition, no re-#define).
+// NUM_MATERIAL_HANDLES is the number of CS:GO smoke sprites to draw from.
 #define NUM_MATERIAL_HANDLES		16
 
-// Volumetric smoke (see docs/smoke-volumetric.md): the cloud is wider than
-// it is tall and sits on the ground, CS2-style, instead of a floating cube.
-// CS2/CS:GO smokes are rounder than CS:S's squat column, so keep the dome
-// close to the width instead of flattening it.
+// Volumetric smoke (see docs/smoke-volumetric.md): the cloud is a sphere that
+// sits on the ground, CS2-style, instead of a floating cube. The grid is
+// 9x9x9 = 729 candidates but the fill culls everything outside the ellipsoid,
+// leaving ~257 puffs on a tighter lattice than the old 6x6x6 cube (216) — a
+// denser, rounder ball. CS2/CS:GO smokes are near as tall as they are wide;
+// 0.85 keeps the dome slightly squashed without going columnar.
 #define SMOKE_CLOUD_HEIGHT_SCALE	0.85
 
 
