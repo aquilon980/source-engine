@@ -778,12 +778,6 @@ public:
 		{
 			SetControlInt("ConsoleCheck", con_enable.GetInt() ? 1 : 0);
 		}
-
-		ConVarRef hud_fastswitch( "hud_fastswitch" );
-		if ( hud_fastswitch.IsValid() )
-		{
-			SetControlInt("FastSwitchCheck", hud_fastswitch.GetInt() ? 1 : 0);
-		}
 	}
 
 	virtual void OnApplyData()
@@ -791,9 +785,6 @@ public:
 		// apply data
 		ConVarRef con_enable( "con_enable" );
 		con_enable.SetValue( GetControlInt( "ConsoleCheck", 0 ) );
-
-		ConVarRef hud_fastswitch( "hud_fastswitch" );
-		hud_fastswitch.SetValue( GetControlInt( "FastSwitchCheck", 0 ) );
 	}
 
 	virtual void OnCommand( const char *command )

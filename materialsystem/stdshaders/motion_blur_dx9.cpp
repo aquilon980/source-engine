@@ -14,7 +14,9 @@
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
 
-ConVar mat_motion_blur_percent_of_screen_max( "mat_motion_blur_percent_of_screen_max", "4.0" );
+// Motion blur is removed entirely (see docs/graphics-mac.md). The shader is
+// kept because it is a precompiled shipped combo, but it has no cvar and is
+// unreachable from game code; this clamp is fixed at the old 4% default.
 
 DEFINE_FALLBACK_SHADER( MotionBlur, MotionBlur_dx9 )
 BEGIN_VS_SHADER_FLAGS( MotionBlur_dx9, "Motion Blur", SHADER_NOT_EDITABLE )
@@ -91,7 +93,7 @@ BEGIN_VS_SHADER_FLAGS( MotionBlur_dx9, "Motion Blur", SHADER_NOT_EDITABLE )
 
 			// Percent of screen clamp
 			float vConst[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
-			vConst[0] = mat_motion_blur_percent_of_screen_max.GetFloat() / 100.0f;
+			vConst[0] = 4.0f / 100.0f; // was mat_motion_blur_percent_of_screen_max
 			pShaderAPI->SetPixelShaderConstant( 0, vConst, 1 );
 
 			// Set values from material proxy

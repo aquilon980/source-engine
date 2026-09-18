@@ -477,15 +477,7 @@ void CBaseSaveGameDialog::OnKeyCodePressed( vgui::KeyCode code )
 		Panel *pSelectedPanel = m_pGameList->GetSelectedPanel();
 		if ( pSelectedPanel )
 		{
-			if ( code == KEY_XBUTTON_A || code == STEAMCONTROLLER_A )
-			{
-				ConVarRef var2( "hud_fastswitch" );
-				if ( var2.IsValid() && var2.GetInt() != 2 )
-				{
-					var2.SetValue( 2 );
-				}
-			}
-
+			// (hud_fastswitch is deleted; fast switch is always on.)
 			m_pLoadButton->DoClick();
 			return;
 		}

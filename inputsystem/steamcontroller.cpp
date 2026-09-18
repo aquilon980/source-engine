@@ -19,7 +19,9 @@ const uint64 UINT64_MAX = 0xffffffffffffffff;
 // memdbgon must be the last include file in a .cpp file!!!
 #include <tier0/memdbgon.h>
 
-ConVar sc_joystick_map( "sc_joystick_map", "1", FCVAR_ARCHIVE, "How to map the analog joystick deadzone and extents 0 = Scaled Cross, 1 = Concentric Mapping to Square." );
+// Joystick/gamepad support is removed entirely (see docs/joystick-off.md):
+// the old sc_joystick_map cvar had no reader; the Steam Controller path below
+// is the only remaining analog input and uses fixed mapping.
 
 #define STEAMPAD_MAX_ANALOGSAMPLE_GYRO		32768
 #define STEAMPAD_MAX_ANALOGSAMPLE_TRIGGER	32768
