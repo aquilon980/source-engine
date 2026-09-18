@@ -48,7 +48,7 @@ ConVar weapon_accuracy_model( "weapon_accuracy_model", "2", FCVAR_REPLICATED | F
 // casual-rules tune (see docs/casual-defaults.md): global spread scale,
 // 1.0 = stock. Scales bullets and crosshair together (both read GetSpread /
 // GetInaccuracy), replicated so client and server agree.
-ConVar weapon_spread_scale( "weapon_spread_scale", "0.0", FCVAR_REPLICATED | FCVAR_ARCHIVE, "Scales all weapon spread and inaccuracy; lower = more accurate.", true, 0.0, true, 2.0 );
+ConVar weapon_spread_scale( "weapon_spread_scale", "0.5", FCVAR_REPLICATED | FCVAR_ARCHIVE, "Scales all weapon spread and inaccuracy; lower = more accurate, 1.0 = stock.", true, 0.0, true, 2.0 );
 
 // ----------------------------------------------------------------------------- //
 // Global functions.

@@ -38,7 +38,7 @@ ConVar sv_showplayerhitboxes( "sv_showplayerhitboxes", "0", FCVAR_REPLICATED, "S
 // soft-recoil tune (see docs/casual-defaults.md): global recoil scale,
 // 1.0 = stock. Applied in CCSPlayer::KickBack, the one choke point every
 // gun's fire kick flows through. Replicated so client and server agree.
-ConVar weapon_recoil_scale( "weapon_recoil_scale", "0.0", FCVAR_REPLICATED | FCVAR_ARCHIVE, "Scales all weapon recoil kick; lower = softer.", true, 0.0, true, 2.0 );
+ConVar weapon_recoil_scale( "weapon_recoil_scale", "0.5", FCVAR_REPLICATED | FCVAR_ARCHIVE, "Scales all weapon recoil kick (view/aim punch); lower = softer, 1.0 = stock.", true, 0.0, true, 2.0 );
 
 #define	CS_MASK_SHOOT (MASK_SOLID|CONTENTS_DEBRIS)
 

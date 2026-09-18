@@ -381,7 +381,7 @@ void CBaseViewModel::SendViewModelMatchingSequence( int sequence )
 #if defined( CLIENT_DLL )
 #include "ivieweffects.h"
 
-ConVar viewmodel_recoil( "viewmodel_recoil", "1.0", FCVAR_ARCHIVE, "Amount of weapon recoil/aimpunch shown on the viewmodel (0 = steady gun)", true, 0.0f, true, 1.0f );
+ConVar viewmodel_recoil( "viewmodel_recoil", "0.5", FCVAR_ARCHIVE, "Amount of weapon recoil/aimpunch shown on the viewmodel (0 = steady gun, 1.0 = stock).", true, 0.0f, true, 1.0f );
 
 // Viewmodel offset (CS:GO-style): shift the gun laterally off-centre. x is the
 // screen-horizontal axis (negative = left), applied to every weapon in
