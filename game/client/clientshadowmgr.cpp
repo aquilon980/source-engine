@@ -161,8 +161,8 @@ private:
 	enum
 	{
 		INVALID_FRAGMENT_HANDLE = (FragmentHandle_t)~0,
-		TEXTURE_PAGE_SIZE	    = 1024,
-		MAX_TEXTURE_POWER    	= 8,
+		TEXTURE_PAGE_SIZE	    = 2048,
+		MAX_TEXTURE_POWER    	= 9,
 #if !defined( _X360 )
 		MIN_TEXTURE_POWER	    = 4,
 #else
@@ -278,21 +278,21 @@ void CTextureAllocator::Reset()
 	// Set up the block sizes....
 	// FIXME: Improve heuristic?!?
 #if !defined( _X360 )
-	m_Blocks[0].m_FragmentPower  = MAX_TEXTURE_POWER-4;	// 128 cells at ExE resolution
+	m_Blocks[0].m_FragmentPower  = MAX_TEXTURE_POWER-4;	// smallest cells
 #else
-	m_Blocks[0].m_FragmentPower  = MAX_TEXTURE_POWER-3;	// 64 cells at DxD resolution
+	m_Blocks[0].m_FragmentPower  = MAX_TEXTURE_POWER-3;
 #endif
-	m_Blocks[1].m_FragmentPower  = MAX_TEXTURE_POWER-3;	// 64 cells at DxD resolution
-	m_Blocks[2].m_FragmentPower  = MAX_TEXTURE_POWER-2;	// 32 cells at CxC resolution
-	m_Blocks[3].m_FragmentPower  = MAX_TEXTURE_POWER-2;		 
-	m_Blocks[4].m_FragmentPower  = MAX_TEXTURE_POWER-1;	// 24 cells at BxB resolution
+	m_Blocks[1].m_FragmentPower  = MAX_TEXTURE_POWER-3;
+	m_Blocks[2].m_FragmentPower  = MAX_TEXTURE_POWER-2;
+	m_Blocks[3].m_FragmentPower  = MAX_TEXTURE_POWER-2;
+	m_Blocks[4].m_FragmentPower  = MAX_TEXTURE_POWER-1;
 	m_Blocks[5].m_FragmentPower  = MAX_TEXTURE_POWER-1;
 	m_Blocks[6].m_FragmentPower  = MAX_TEXTURE_POWER-1;
 	m_Blocks[7].m_FragmentPower  = MAX_TEXTURE_POWER-1;
-	m_Blocks[8].m_FragmentPower  = MAX_TEXTURE_POWER-1;
-	m_Blocks[9].m_FragmentPower  = MAX_TEXTURE_POWER-1;
-	m_Blocks[10].m_FragmentPower = MAX_TEXTURE_POWER;	// 6 cells at AxA resolution
-	m_Blocks[11].m_FragmentPower = MAX_TEXTURE_POWER;	 
+	m_Blocks[8].m_FragmentPower  = MAX_TEXTURE_POWER;	// full-block cells
+	m_Blocks[9].m_FragmentPower  = MAX_TEXTURE_POWER;
+	m_Blocks[10].m_FragmentPower = MAX_TEXTURE_POWER;
+	m_Blocks[11].m_FragmentPower = MAX_TEXTURE_POWER;
 	m_Blocks[12].m_FragmentPower = MAX_TEXTURE_POWER;
 	m_Blocks[13].m_FragmentPower = MAX_TEXTURE_POWER;
 	m_Blocks[14].m_FragmentPower = MAX_TEXTURE_POWER;
@@ -535,7 +535,7 @@ bool CTextureAllocator::UseTexture( TextureHandle_t h, bool bWillRedraw, float f
 		// If the current fragment is at or near the desired power, we're done
 		nCurrentPower = GetFragmentPower(info.m_Fragment);
 		Assert( nCurrentPower <= info.m_Power );
-		bool bShouldKeepTexture = (!bWillRedraw) && (nDesiredPower < 8) && (nDesiredPower - nCurrentPower <= 1);
+		bool bShouldKeepTexture = (!bWillRedraw) && (nDesiredPower < MAX_TEXTURE_POWER) && (nDesiredPower - nCurrentPower <= 1);
 		if ((nCurrentPower == nDesiredPower) || bShouldKeepTexture)
 		{
 			// Move to the back of the LRU
@@ -675,8 +675,9 @@ void CTextureAllocator::GetTextureRect(TextureHandle_t handle, int& x, int& y, i
 
 //-----------------------------------------------------------------------------
 // Defines how big of a shadow texture we should be making per caster...
+// (texels per world unit of caster size; 4.0 doubles the old 2.0 density)
 //-----------------------------------------------------------------------------
-#define TEXEL_SIZE_PER_CASTER_SIZE	2.0f 
+#define TEXEL_SIZE_PER_CASTER_SIZE	4.0f 
 #define MAX_FALLOFF_AMOUNT 240
 #define MAX_CLIP_PLANE_COUNT 4
 #define SHADOW_CULL_TOLERANCE 0.5f
