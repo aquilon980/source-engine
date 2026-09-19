@@ -824,8 +824,27 @@ void CCSBot::UpdateLookAround( bool updateNow )
 			if (pal && pal->IsAlive() && (GetCentroid( pal ) - GetAbsOrigin()).IsLengthLessThan( 800.0f ) &&
 				RandomFloat( 0.0f, 1.0f ) < m_fidgetChance)
 			{
-				SetLookAt( "Teammate glance", GetCentroid( pal ), PRIORITY_LOW, RandomFloat( 0.6f, 1.2f ), true );
-				m_nextFidgetTime = gpGlobals->curtime + RandomFloat( 2.0f, 5.0f );
+				// the friend tracker has no FOV test, so the closest "visible"
+				// pal can be directly behind us - only glance at teammates
+				// roughly ahead, or we'd spin like an owl every few seconds
+				Vector toPal = GetCentroid( pal ) - EyePositionConst();
+				QAngle toPalAngles;
+				VectorAngles( toPal, toPalAngles );
+				float yawDiff = toPalAngles.y - m_lookAheadAngle;
+				while (yawDiff > 180.0f)
+					yawDiff -= 360.0f;
+				while (yawDiff < -180.0f)
+					yawDiff += 360.0f;
+
+				if (fabs( yawDiff ) < 100.0f)
+				{
+					SetLookAt( "Teammate glance", GetCentroid( pal ), PRIORITY_LOW, RandomFloat( 0.6f, 1.2f ), true );
+					m_nextFidgetTime = gpGlobals->curtime + RandomFloat( 2.0f, 5.0f );
+				}
+				else
+				{
+					m_nextFidgetTime = gpGlobals->curtime + RandomFloat( 1.0f, 2.5f );
+				}
 			}
 			else
 			{
