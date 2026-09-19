@@ -543,6 +543,9 @@ void CCSBot::Update( void )
 	// toss grenades
 	LookForGrenadeTargets();
 
+	// tactical combat grenades (flash setups, HE flushes, smoke cover)
+	TryTacticalGrenade();
+
 	// process grenade throw state machine
 	UpdateGrenadeThrow();
 

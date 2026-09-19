@@ -145,7 +145,7 @@ void BuyState::OnEnter( CCSBot *me )
 
 	if (TheCSBots()->AllowGrenades())
 	{
-		m_buyGrenade = (RandomFloat( 0.0f, 100.0f ) < 33.3f) ? true : false;
+		m_buyGrenade = (RandomFloat( 0.0f, 100.0f ) < 70.0f) ? true : false;
 	}
 	else
 	{
@@ -644,7 +644,7 @@ void BuyState::OnUpdate( CCSBot *me )
 						args.Tokenize( "buy smokegrenade" );
 						me->ClientCommand( args );	// smoke grenade
 					}
-					else if (rnd < 35)
+					else if (rnd < 50)
 					{
 						args.Tokenize( "buy flashbang" );
 						me->ClientCommand( args );	// flashbang

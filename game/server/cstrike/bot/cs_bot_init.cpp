@@ -80,6 +80,7 @@ ConVar cv_bot_eco_limit( "bot_eco_limit", "2000", FCVAR_REPLICATED, "If nonzero,
 ConVar cv_bot_auto_follow( "bot_auto_follow", "0", FCVAR_REPLICATED, "If nonzero, bots with high co-op may automatically follow a nearby human player." );
 ConVar cv_bot_flipout( "bot_flipout", "0", FCVAR_REPLICATED | FCVAR_CHEAT, "If nonzero, bots use no CPU for AI. Instead, they run around randomly." );
 ConVar cv_bot_human_strafe( "bot_human_strafe", "1", FCVAR_REPLICATED, "If nonzero, bots make reactive, human-like strafing decisions in combat (juke when tracked, hold still to shoot)." );
+ConVar cv_bot_tactical_grenades( "bot_tactical_grenades", "1", FCVAR_REPLICATED, "If nonzero, bots use grenades tactically in combat: flash setups before re-peeking, HE to flush entrenched enemies, smoke for cover when outnumbered or scoped." );
 
 
 extern void FinishClientPutInServer( CCSPlayer *pPlayer );
@@ -197,6 +198,7 @@ void CCSBot::ResetValues( void )
 	m_enemy = NULL;
 
 	m_grenadeTossState = NOT_THROWING;
+	m_tacticalGrenadeTimer.Invalidate();
 	m_initialEncounterArea = NULL;
 
 	m_wasSafe = true;

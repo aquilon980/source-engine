@@ -1639,7 +1639,8 @@ void CCSBotManager::OnServerShutdown( IGameEvent *event )
 			"bot_allow_grenades",
 			"bot_human_strafe",
 			"bot_damage_to_player",
-			"bot_smoke_radius"
+			"bot_smoke_radius",
+			"bot_tactical_grenades"
 		};
 		
 		KeyValues *data = new KeyValues( "ServerConfig" );

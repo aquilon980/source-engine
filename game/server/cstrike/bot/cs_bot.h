@@ -1124,6 +1124,8 @@ private:
 	const CNavArea *m_initialEncounterArea;							///< area where we think we will initially encounter the enemy
 	void LookForGrenadeTargets( void );								///< look for grenade throw targets and throw our grenade at them
 	void UpdateGrenadeThrow( void );								///< process grenade throwing
+	void TryTacticalGrenade( void );								///< flash setups, HE flushes and smoke cover in combat
+	CountdownTimer m_tacticalGrenadeTimer;							///< cooldown between tactical grenade throws
 	CountdownTimer m_isAvoidingGrenade;								///< if nonzero we are in the act of avoiding a grenade
 
 

@@ -907,6 +907,143 @@ void CCSBot::LookForGrenadeTargets( void )
 
 
 //--------------------------------------------------------------------------------------------------------------
+/**
+ * Find a grenade of the given weapon classname in our inventory
+ * (bots usually carry a single grenade, but the slot can hold several types).
+ */
+static CWeaponCSBase *FindGrenadeByClassname( CCSBot *me, const char *classname )
+{
+	for ( int i = 0; i < MAX_WEAPONS; ++i )
+	{
+		CWeaponCSBase *weapon = dynamic_cast< CWeaponCSBase * >( me->GetWeapon( i ) );
+		if ( weapon && weapon->GetSlot() == WEAPON_SLOT_GRENADES && FStrEq( weapon->GetClassname(), classname ) )
+			return weapon;
+	}
+
+	return NULL;
+}
+
+//--------------------------------------------------------------------------------------------------------------
+/**
+ * Return true if a living human teammate is within range - popping a flash
+ * there would blind our own side.
+ */
+static bool IsHumanTeammateNearby( CCSBot *me, float range )
+{
+	for ( int i = 1; i <= gpGlobals->maxClients; ++i )
+	{
+		CBasePlayer *player = static_cast< CBasePlayer * >( UTIL_PlayerByIndex( i ) );
+		if (player == NULL || player == me || !player->IsAlive() || player->IsBot())
+			continue;
+
+		if (!me->InSameTeam( player ))
+			continue;
+
+		if ((player->GetAbsOrigin() - me->GetAbsOrigin()).IsLengthLessThan( range ))
+			return true;
+	}
+
+	return false;
+}
+
+//--------------------------------------------------------------------------------------------------------------
+/**
+ * Tactical grenade use in combat: flash setups before re-peeking, HE to flush
+ * entrenched enemies, smoke for cover when outnumbered or scoped. Runs in
+ * Upkeep next to the pre-planned encounter-area throws. One shared cooldown
+ * plus per-situation skill/aggression rolls keep it occasional, not spammy.
+ */
+void CCSBot::TryTacticalGrenade( void )
+{
+	if (!cv_bot_tactical_grenades.GetBool() || cv_bot_zombie.GetBool())
+		return;
+
+	if (IsThrowingGrenade() || !HasGrenade() || IsUsingKnife() || IsOnLadder() || IsDefusingBomb() || IsReloading())
+		return;
+
+	if (!m_tacticalGrenadeTimer.IsElapsed())
+		return;
+
+	const float skill = GetProfile()->GetSkill();
+	const float aggression = GetProfile()->GetAggression();
+
+	// 1. Flash setup: mid-fight, enemy just broke sight - pop a flash over
+	// their last known spot and re-peek while they're blind. Rifles only;
+	// snipers stay on the scope.
+	if (IsAttacking() && !IsUsingSniperRifle() && !IsEnemyVisible() &&
+		GetTimeSinceLastSawEnemy() > 0.4f && GetTimeSinceLastSawEnemy() < 3.0f)
+	{
+		CWeaponCSBase *flash = FindGrenadeByClassname( this, "weapon_flashbang" );
+		if (flash && !IsHumanTeammateNearby( this, 1600.0f ) &&
+			RandomFloat( 0.0f, 100.0f ) < 30.0f + 50.0f * skill)
+		{
+			SelectItem( "weapon_flashbang" );
+			if (IsUsingGrenade())
+			{
+				Vector target = GetLastKnownEnemyPosition() + Vector( 0, 0, 40.0f );
+				ThrowGrenade( target );
+			}
+
+			if (IsThrowingGrenade())
+			{
+				PrintIfWatched( "Tactical flash setup!\n" );
+				m_tacticalGrenadeTimer.Start( 25.0f );
+			}
+			return;
+		}
+	}
+
+	// 2. HE flush: enemy visible but far, or us outnumbered - soften them up.
+	// Rifles only; snipers keep shooting.
+	CBasePlayer *enemy = GetBotEnemy();
+	if (IsAttacking() && !IsUsingSniperRifle() && enemy && IsEnemyVisible())
+	{
+		float range = (enemy->GetAbsOrigin() - GetAbsOrigin()).Length();
+		CWeaponCSBase *he = FindGrenadeByClassname( this, "weapon_hegrenade" );
+		if (he && range > 350.0f && range < 900.0f && (range > 550.0f || IsOutnumbered()) &&
+			RandomFloat( 0.0f, 100.0f ) < 20.0f + 40.0f * aggression)
+		{
+			SelectItem( "weapon_hegrenade" );
+			if (IsUsingGrenade())
+			{
+				ThrowGrenade( enemy->GetAbsOrigin() );
+			}
+
+			if (IsThrowingGrenade())
+			{
+				PrintIfWatched( "Flushing with HE!\n" );
+				m_tacticalGrenadeTimer.Start( 25.0f );
+			}
+			return;
+		}
+	}
+
+	// 3. Smoke cover: outnumbered or scoped at with the enemy recently seen -
+	// drop smoke halfway between us and them and reposition.
+	if ((IsOutnumbered() || CanSeeSniper()) && GetTimeSinceLastSawEnemy() < 2.0f)
+	{
+		CWeaponCSBase *smoke = FindGrenadeByClassname( this, "weapon_smokegrenade" );
+		if (smoke && RandomFloat( 0.0f, 100.0f ) < 50.0f)
+		{
+			SelectItem( "weapon_smokegrenade" );
+			if (IsUsingGrenade())
+			{
+				Vector mid = (GetAbsOrigin() + GetLastKnownEnemyPosition()) * 0.5f;
+				ThrowGrenade( mid );
+			}
+
+			if (IsThrowingGrenade())
+			{
+				PrintIfWatched( "Smoking for cover!\n" );
+				m_tacticalGrenadeTimer.Start( 25.0f );
+			}
+			return;
+		}
+	}
+}
+
+
+//--------------------------------------------------------------------------------------------------------------
 class FOVClearOfFriends
 {
 public:
