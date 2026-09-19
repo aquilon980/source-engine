@@ -269,6 +269,8 @@ static ConVar	violence_agibs( "violence_agibs","1", 0, "Show alien gib entities"
 // Marked as FCVAR_USERINFO so that the server can cull CC messages before networking them down to us!!!
 ConVar closecaption( "closecaption", "0", FCVAR_ARCHIVE | FCVAR_ARCHIVE_XBOX | FCVAR_USERINFO, "Enable close captioning." );
 extern ConVar sv_unlockedchapters;
+// Seb: live 3D main-menu background (docs/menu-background.md).
+extern ConVar menu_background;
 
 void Snd_Restart_f()
 {
@@ -4218,6 +4220,20 @@ void Host_Init( bool bDedicated )
 
 	// go directly to run state with no active game
 	HostState_Init();
+
+#ifndef SWDS
+	// Seb: live 3D main-menu background (docs/menu-background.md). The engine
+	// only ever loaded a background level on Xbox 360 — CL_ShouldLoadBackgroundLevel
+	// explicitly bails on PC ("pc can't get into background maps fast enough").
+	// Queue the startup menu here so Counter-Strike renders its map behind the
+	// main menu instead of the static image. CL_CheckToDisplayStartupMenus then
+	// issues map_background <menu_background_map>; engine->IsLevelMainMenuBackground()
+	// makes GameUI fade the static art out (BasePanel::UpdateBackgroundState).
+	if ( !IsX360() && !bDedicated && menu_background.GetBool() && GetCurrentMod() && !Q_stricmp( GetCurrentMod(), "cstrike" ) )
+	{
+		Cbuf_AddText( "startupmenu\n" );
+	}
+#endif
 
 	// check for reslist generation
 	if ( CommandLine()->FindParm( "-makereslists" ) )

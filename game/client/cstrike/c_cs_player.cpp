@@ -2525,6 +2525,44 @@ void C_CSPlayer::CalcObserverView( Vector& eyeOrigin, QAngle& eyeAngles, float& 
 	BaseClass::CalcObserverView( eyeOrigin, eyeAngles, fov );
 }
 
+// Seb: live 3D main-menu background (see docs/menu-background.md). When the
+// engine is running Counter-Strike's menu map as a background level, drive the
+// view along de_aztec's own authored intro-camera spots (the point_viewcontrol
+// + info_target pairs baked into the BSP) instead of the roaming observer the
+// WELCOME state starts in — otherwise the menu looks out of a spawn point.
+void C_CSPlayer::CalcView( Vector& eyeOrigin, QAngle& eyeAngles, float& zNear, float& zFar, float& fov )
+{
+	BaseClass::CalcView( eyeOrigin, eyeAngles, zNear, zFar, fov );
+
+	if ( !engine->IsLevelMainMenuBackground() )
+		return;
+
+	const char *pszLevel = engine->GetLevelName();
+	if ( !pszLevel || !V_stristr( pszLevel, "aztec" ) )
+		return;
+
+	// The three cameras de_aztec ships (point_viewcontrol -> its cam target).
+	static const Vector s_camPos[3] =
+	{
+		Vector(  384.0f, -1216.0f,  16.0f ),
+		Vector( -704.0f,   576.0f,  16.0f ),
+		Vector( 1344.0f,    96.0f,  64.0f ),
+	};
+	static const Vector s_camLook[3] =
+	{
+		Vector( -720.0f,  -384.0f, -208.0f ),
+		Vector( -400.0f,   704.0f, -172.0f ),
+		Vector(  592.0f,   496.0f, -368.0f ),
+	};
+
+	const int nCams = ARRAYSIZE( s_camPos );
+	int iCam = ( (int)( gpGlobals->curtime / 8.0f ) ) % nCams;
+
+	eyeOrigin = s_camPos[iCam];
+	Vector vDir = s_camLook[iCam] - s_camPos[iCam];
+	VectorAngles( vDir, eyeAngles );
+}
+
 //=============================================================================
 // HPE_BEGIN:
 //=============================================================================

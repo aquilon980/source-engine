@@ -99,6 +99,12 @@ extern ConVar cl_clanid;
 
 ConVar sv_unlockedchapters( "sv_unlockedchapters", "1", FCVAR_ARCHIVE | FCVAR_ARCHIVE_XBOX, "Highest unlocked game chapter." );
 
+// Seb: live 3D main-menu background (see docs/menu-background.md). The engine
+// only ever used a background level on Xbox 360; these enable the same thing for
+// Counter-Strike: Source on PC — the menu renders over a live map.
+ConVar menu_background( "menu_background", "1", FCVAR_ARCHIVE, "Load a live 3D map behind the main menu (Counter-Strike: Source)." );
+ConVar menu_background_map( "menu_background_map", "de_aztec", FCVAR_ARCHIVE, "Map rendered behind the main menu when menu_background is 1." );
+
 static ConVar tv_nochat	( "tv_nochat", "0", FCVAR_ARCHIVE | FCVAR_USERINFO, "Don't receive chat messages from other SourceTV spectators" );
 static ConVar cl_LocalNetworkBackdoor( "cl_localnetworkbackdoor", "1", 0, "Enable network optimizations for single player games." );
 static ConVar cl_ignorepackets( "cl_ignorepackets", "0", FCVAR_CHEAT, "Force client to ignore packets (for debugging)." );
@@ -2423,6 +2429,19 @@ int CL_GetBackgroundLevelIndex( int nNumChapters )
 void CL_GetBackgroundLevelName( char *pszBackgroundName, int bufSize, bool bMapName )
 {
 	Q_strncpy( pszBackgroundName, DEFAULT_BACKGROUND_NAME, bufSize );
+
+	// Seb: Counter-Strike uses its own menu map instead of the HL2 chapter
+	// backgrounds (see docs/menu-background.md). Checked first so the chapter
+	// file can't override it.
+	if ( bMapName && menu_background.GetBool() && !Q_stricmp( COM_GetModDirectory(), "cstrike" ) )
+	{
+		const char *pszMap = menu_background_map.GetString();
+		if ( pszMap && pszMap[0] )
+		{
+			Q_strncpy( pszBackgroundName, pszMap, bufSize );
+			return;
+		}
+	}
 
 	KeyValues *pChapterFile = new KeyValues( pszBackgroundName );
 

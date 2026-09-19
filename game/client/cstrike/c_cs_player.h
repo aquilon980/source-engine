@@ -75,6 +75,7 @@ public:
 	virtual const QAngle& EyeAngles();
 	virtual const QAngle& GetRenderAngles();
 	virtual void CalcObserverView( Vector& eyeOrigin, QAngle& eyeAngles, float& fov );
+	virtual void CalcView( Vector& eyeOrigin, QAngle& eyeAngles, float& zNear, float& zFar, float& fov );	// Seb: menu background camera
 
 	virtual void			GetRenderBounds( Vector& theMins, Vector& theMaxs );
 	virtual void			GetShadowRenderBounds( Vector &mins, Vector &maxs, ShadowType_t shadowType );
