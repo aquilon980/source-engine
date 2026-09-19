@@ -657,14 +657,14 @@ void AttackState::OnUpdate( CCSBot *me )
 		// if we have a sniper rifle and our enemy is too close, switch to pistol
 		const float sniperMinRange = 160.0f;	// NOTE: Must be larger than NO_ZOOM range in AdjustZoom()
 		if ((enemyOrigin - myOrigin).IsLengthLessThan( sniperMinRange ))
-			me->EquipPistol();
+			me->EquipPistol( MUST_EQUIP );
 	}
 	else if (me->IsUsingShotgun())
 	{
 		// if we have a shotgun equipped and enemy is too far away, switch to pistol
 		const float shotgunMaxRange = 600.0f;
 		if ((enemyOrigin - myOrigin).IsLengthGreaterThan( shotgunMaxRange ))
-			me->EquipPistol();
+			me->EquipPistol( MUST_EQUIP );
 	}
 
 	// if we're sniping, look through the scope - need to do this here in case a reload resets our scope
@@ -846,7 +846,7 @@ void AttackState::OnUpdate( CCSBot *me )
 		return;
 	}
 
-	if (true || gpGlobals->curtime > m_reacquireTimestamp)
+	if (gpGlobals->curtime > m_reacquireTimestamp)
 		me->FireWeaponAtEnemy();
 
 

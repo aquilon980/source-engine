@@ -1694,6 +1694,10 @@ void CCSBot::Blind( float holdTime, float fadeTime, float startingAlpha )
 	{
 		Wait( 0.75f * holdTime );
 		BecomeAlert();
+		// a flash still breaks our aim - drop the lock and force the focus
+		// mechanism to re-settle instead of resuming at pre-flash accuracy
+		StopAiming();
+		m_aimSpreadTimestamp = gpGlobals->curtime;
 		BaseClass::Blind( holdTime, fadeTime, startingAlpha );
 		return;
 	}

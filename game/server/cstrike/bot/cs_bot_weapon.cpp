@@ -85,19 +85,13 @@ void CCSBot::FireWeaponAtEnemy( void )
 			{
 				bool doAttack;
 
-				// if friendly fire is on, don't fire if a teammate is blocking our line of fire
-				if (TheCSBots()->AllowFriendlyFireDamage())
-				{
-					if (IsFriendInLineOfFire())
-						doAttack = false;
-					else
-						doAttack = true;
-				}
+				// don't fire if a teammate is blocking our line of fire. Checked
+				// regardless of friendly-fire: with FF off the rounds are still
+				// absorbed by the teammate's body, so it's wasted damage either way.
+				if (IsFriendInLineOfFire())
+					doAttack = false;
 				else
-				{
-					// fire freely
 					doAttack = true;
-				}
 
 				if (doAttack)
 				{
@@ -150,9 +144,10 @@ void CCSBot::FireWeaponAtEnemy( void )
 				else	// not using a pistol
 				{
 					const float sprayRange = 400.0f;
-					if (GetProfile()->GetSkill() < 0.5f || rangeToEnemy < sprayRange || IsUsingMachinegun())
+					if ((GetProfile()->GetSkill() < 0.5f && !IsActiveWeaponRecoilHigh()) || rangeToEnemy < sprayRange || IsUsingMachinegun())
 					{
-						// spray 'n pray if enemy is close, or we're not that good, or we're using the big machinegun
+						// spray 'n pray if enemy is close, or we're not that good, or we're using the big machinegun.
+						// Once recoil climbs (punch), even sprayers fall into burst timing to stay on target.
 						m_fireWeaponTimestamp = 0.0f;
 					}
 					else
@@ -298,9 +293,8 @@ bool CCSBot::AdjustZoom( float range )
 	{
 		SecondaryAttack();
 
-		// pause after zoom to allow "eyes" to refocus
-// 		m_zoomTimer.Start( 0.25f + (1.0f - GetProfile()->GetSkill()) );
-		m_zoomTimer.Start( 0.25f );
+		// pause after zoom to allow "eyes" to refocus - poor bots settle slower
+		m_zoomTimer.Start( 0.25f + (1.0f - GetProfile()->GetSkill()) );
 	}
 
 	return adjustZoom;
@@ -512,10 +506,10 @@ void CCSBot::EquipBestWeapon( bool mustEquip )
 /**
  * Equip our pistol
  */
-void CCSBot::EquipPistol( void )
+void CCSBot::EquipPistol( bool mustEquip )
 {
-	// throttle how often equipping is allowed
-	if (m_equipTimer.GetElapsedTime() < minEquipInterval)
+	// throttle how often equipping is allowed (combat switches bypass it)
+	if (!mustEquip && m_equipTimer.GetElapsedTime() < minEquipInterval)
 		return;
 
 	if (TheCSBots()->AllowPistols() && !IsUsingPistol())
@@ -1153,13 +1147,14 @@ void CCSBot::ReloadCheck( void )
 
 	if (IsActiveWeaponClipEmpty())
 	{
-		// high-skill players switch to pistol instead of reloading during combat
-		if (GetProfile()->GetSkill() > 0.5f && IsAttacking())
+		// players switch to pistol instead of reloading during combat -
+		// any skill level can manage that; dry-reloading in the open is suicide
+		if (IsAttacking())
 		{
 			if (!GetActiveCSWeapon()->IsPistol() && !IsPistolEmpty())
 			{
 				// switch to pistol instead of reloading
-				EquipPistol();
+				EquipPistol( MUST_EQUIP );
 				return;
 			}
 		}

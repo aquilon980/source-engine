@@ -795,7 +795,7 @@ public:
 	//- weapon query and equip --------------------------------------------------------------------------------------
 	#define MUST_EQUIP true
 	void EquipBestWeapon( bool mustEquip = false );					///< equip the best weapon we are carrying that has ammo
-	void EquipPistol( void );										///< equip our pistol
+	void EquipPistol( bool mustEquip = false );							///< equip our pistol (combat switches pass MUST_EQUIP to skip the 5s throttle)
 	void EquipKnife( void );										///< equip the knife
 
 	#define DONT_USE_SMOKE_GRENADE true
@@ -1880,8 +1880,8 @@ public:
 			float dist;
 			if (ladder)
 			{
-				// ladders are slow to use
-				const float ladderPenalty = 1.0f; // 3.0f;
+				// ladders are slow to use (climb speed is a fraction of run speed)
+				const float ladderPenalty = 3.0f;
 				dist = ladderPenalty * ladder->m_length;
 
 				// if we are currently escorting hostages, avoid ladders (hostages are confused by them)
@@ -1950,9 +1950,8 @@ public:
 			// if this is a "jump" area, add penalty
 			if (area->GetAttributes() & NAV_MESH_JUMP)
 			{
-				// jumping can slow you down
-				//const float jumpPenalty = (m_route == FASTEST_ROUTE) ? 100.0f : 0.5f;
-				const float jumpPenalty = 1.0f;
+				// jumping slows you down to roughly half speed through the area
+				const float jumpPenalty = 2.0f;
 				cost += jumpPenalty * dist;
 			}
 

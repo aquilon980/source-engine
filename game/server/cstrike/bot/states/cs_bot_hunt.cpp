@@ -202,18 +202,21 @@ void HuntState::OnUpdate( CCSBot *me )
 				}
 			}
 
-			// if all the areas were too small, pick one at random
-			int which = RandomInt( 0, areaCount-1 );
-
-			areaCount = 0;
-			FOR_EACH_VEC( TheNavAreas, hit )
+			// if no large area qualified (or there are no areas at all),
+			// fall back to a random pick instead of the smart one above
+			if (m_huntArea == NULL && areaCount > 0)
 			{
-				m_huntArea = TheNavAreas[ hit ];
+				int which = RandomInt( 0, areaCount-1 );
 
-				if (which == areaCount)
-					break;
+				FOR_EACH_VEC( TheNavAreas, hit )
+				{
+					m_huntArea = TheNavAreas[ hit ];
 
-				--which;
+					if (which == 0)
+						break;
+
+					--which;
+				}
 			}
 		}
 
