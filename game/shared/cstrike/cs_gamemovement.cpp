@@ -28,7 +28,10 @@ extern bool g_bMovementOptimizations;
 
 ConVar sv_timebetweenducks( "sv_timebetweenducks", "0", FCVAR_REPLICATED, "Minimum time before recognizing consecutive duck key", true, 0.0, true, 2.0 );
 ConVar sv_enableboost( "sv_enableboost", "0", FCVAR_REPLICATED | FCVAR_NOTIFY, "Allow boost exploits");
-ConVar cs_autojump( "cs_autojump", "0", FCVAR_REPLICATED | FCVAR_NOTIFY );
+// Auto bhop: holding jump re-jumps the instant we touch the ground, no need to
+// release and re-press. Default on. (Was cs_autojump, default off; renamed to
+// the CS:GO name and turned on - see docs/autobunnyhop.md.)
+ConVar sv_autobunnyhopping( "sv_autobunnyhopping", "1", FCVAR_REPLICATED | FCVAR_NOTIFY, "If nonzero, holding the jump key jumps again as soon as you land (no need to re-press)." );
 
 class CCSGameMovement : public CGameMovement
 {
@@ -692,7 +695,7 @@ bool CCSGameMovement::CheckJumpButton( void )
 	}
 
 	if ( (mv->m_nOldButtons & IN_JUMP) &&
-		(!cs_autojump.GetBool() && m_pCSPlayer->GetGroundEntity()) )
+		(!sv_autobunnyhopping.GetBool() && m_pCSPlayer->GetGroundEntity()) )
 	{
 		return false;		// don't pogo stick
 	}
