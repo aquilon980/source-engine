@@ -404,13 +404,14 @@ protected:
 	virtual void Paint();
 	static void DrawCrosshairRect( int x, int y, int w, int h, bool bAdditive );
 	void InitCrosshairColorEntries();
+	void InitCrosshairStyleEntries();
 	void UpdateCrosshair();
 
 private:
 	COptionsSubMultiplayer* m_pOptionsPanel;
 	vgui::ComboBox *m_pColorComboBox;
+	vgui::ComboBox *m_pStyleComboBox;
 	CCvarToggleCheckButton *m_pAlphaCheckbox;
-	CCvarToggleCheckButton *m_pDynamicCheckbox;
 	CCvarToggleCheckButton *m_pDotCheckbox;
 	CCvarSlider *m_pColorAlphaSlider;
 	CCvarSlider *m_pColorRSlider;
@@ -418,6 +419,7 @@ private:
 	CCvarSlider *m_pColorBSlider;
 	CCvarSlider *m_pSizeSlider;
 	CCvarSlider *m_pThicknessSlider;
+	CCvarSlider *m_pGapSlider;
 	int m_R, m_G, m_B;
 	float m_barSize;
 	float m_barThickness;
@@ -429,8 +431,8 @@ CrosshairImagePanelCS::CrosshairImagePanelCS( Panel *parent, const char *name, C
 {
 	m_pOptionsPanel = pOptionsPanel;
 	m_pColorComboBox = new ComboBox(m_pOptionsPanel, "CrosshairColorComboBox", 6, false);
+	m_pStyleComboBox = new ComboBox(m_pOptionsPanel, "CrosshairStyleComboBox", 6, false);
 	m_pAlphaCheckbox = new CCvarToggleCheckButton(m_pOptionsPanel, "CrosshairTranslucencyCheckbox", "#GameUI_Crosshair_Blend", "cl_crosshairusealpha");
-	m_pDynamicCheckbox = new CCvarToggleCheckButton(m_pOptionsPanel, "CrosshairDynamicCheckbox", "#GameUI_CrosshairDynamic", "cl_dynamiccrosshair");
 	m_pDotCheckbox = new CCvarToggleCheckButton(m_pOptionsPanel, "CrosshairDotCheckbox", "#GameUI_CrosshairDot", "cl_crosshairdot");
 	m_pColorAlphaSlider = new CCvarSlider( m_pOptionsPanel, "Alpha Slider", "#GameUI_CrosshairColor_Alpha",
 		0.0f, 255.0f, "cl_crosshairalpha" );
@@ -444,6 +446,8 @@ CrosshairImagePanelCS::CrosshairImagePanelCS( Panel *parent, const char *name, C
 		0.0f, 12.0f, "cl_crosshairsize" );
 	m_pThicknessSlider = new CCvarSlider( m_pOptionsPanel, "Thickness Slider", "#GameUI_Crosshair_Thickness",
 		0.0f, 3.0f, "cl_crosshairthickness" );
+	m_pGapSlider = new CCvarSlider( m_pOptionsPanel, "Gap Slider", "#GameUI_Crosshair_Gap",
+		0.0f, 20.0f, "cl_crosshairgap" );
 
 	m_pColorAlphaSlider->SetTickCaptions("", "");
 	m_pColorRSlider->SetTickCaptions("", "");
@@ -451,19 +455,22 @@ CrosshairImagePanelCS::CrosshairImagePanelCS( Panel *parent, const char *name, C
 	m_pColorBSlider->SetTickCaptions("", "");
 	m_pSizeSlider->SetTickCaptions("", "");
 	m_pThicknessSlider->SetTickCaptions("", "");
+	m_pGapSlider->SetTickCaptions("", "");
 
 	m_pAlphaCheckbox->AddActionSignalTarget(this);
-	m_pDynamicCheckbox->AddActionSignalTarget(this);
 	m_pDotCheckbox->AddActionSignalTarget(this);
 	m_pColorComboBox->AddActionSignalTarget( this );
+	m_pStyleComboBox->AddActionSignalTarget( this );
 	m_pColorAlphaSlider->AddActionSignalTarget( this );
 	m_pColorRSlider->AddActionSignalTarget( this );
 	m_pColorGSlider->AddActionSignalTarget( this );
 	m_pColorBSlider->AddActionSignalTarget( this );
 	m_pSizeSlider->AddActionSignalTarget( this );
 	m_pThicknessSlider->AddActionSignalTarget( this );
+	m_pGapSlider->AddActionSignalTarget( this );
 
 	InitCrosshairColorEntries();
+	InitCrosshairStyleEntries();
 
 	m_iCrosshairTextureID = vgui::surface()->CreateNewTextureID();
 	vgui::surface()->DrawSetTextureFile( m_iCrosshairTextureID, "vgui/white_additive" , true, false);
@@ -495,6 +502,18 @@ void CrosshairImagePanelCS::InitCrosshairColorEntries()
 }
 
 //-----------------------------------------------------------------------------
+// Purpose: initialize the crosshair style list (CS:GO/CS2-style static choice)
+//-----------------------------------------------------------------------------
+void CrosshairImagePanelCS::InitCrosshairStyleEntries()
+{
+	if (m_pStyleComboBox != NULL)
+	{
+		m_pStyleComboBox->AddItem( "#GameUI_CrosshairStyle_Dynamic", NULL );
+		m_pStyleComboBox->AddItem( "#GameUI_CrosshairStyle_Static", NULL );
+	}
+}
+
+//-----------------------------------------------------------------------------
 void CrosshairImagePanelCS::DrawCrosshairRect( int x0, int y0, int x1, int y1, bool bAdditive )
 {
 	if ( bAdditive )
@@ -515,7 +534,7 @@ void CrosshairImagePanelCS::Paint()
 	GetSize( wide, tall );
 
 	bool bAdditive = !m_pAlphaCheckbox->IsSelected();
-	bool bDynamic = m_pDynamicCheckbox->IsSelected();
+	bool bDynamic = ( m_pStyleComboBox->GetActiveItem() == 0 );
 
 	int a = 255;
 	if ( !bAdditive )
@@ -535,6 +554,10 @@ void CrosshairImagePanelCS::Paint()
 	int iBarThickness = max(1, RoundFloatToInt(m_barThickness * (float)screenTall / 480.0f));
 
 	float fBarGap = 4.0f;
+	if ( m_pGapSlider && m_pGapSlider->GetSliderValue() > 0.0f )
+	{
+		fBarGap = m_pGapSlider->GetSliderValue();
+	}
 	if ( bDynamic )
 	{
 		float curtime = system()->GetFrameTime();
@@ -658,7 +681,6 @@ void CrosshairImagePanelCS::ResetData()
 	m_pColorComboBox->ActivateItemByRow(index);
 
 	m_pAlphaCheckbox->Reset();
-	m_pDynamicCheckbox->Reset();
 	m_pDotCheckbox->Reset();
 	m_pColorRSlider->Reset();
 	m_pColorGSlider->Reset();
@@ -666,6 +688,12 @@ void CrosshairImagePanelCS::ResetData()
 	m_pColorAlphaSlider->Reset();
 	m_pSizeSlider->Reset();
 	m_pThicknessSlider->Reset();
+	m_pGapSlider->Reset();
+
+	// combo rows: 0 = Dynamic, 1 = Static (cl_dynamiccrosshair 0/3 is static)
+	ConVarRef cl_dynamiccrosshair( "cl_dynamiccrosshair", true );
+	int iStyle = ( cl_dynamiccrosshair.IsValid() && cl_dynamiccrosshair.GetInt() != 0 && cl_dynamiccrosshair.GetInt() != 3 ) ? 0 : 1;
+	m_pStyleComboBox->ActivateItemByRow( iStyle );
 
 	UpdateCrosshair();
 }
@@ -673,7 +701,6 @@ void CrosshairImagePanelCS::ResetData()
 void CrosshairImagePanelCS::ApplyChanges()
 {
 	m_pAlphaCheckbox->ApplyChanges();
-	m_pDynamicCheckbox->ApplyChanges();
 	m_pDotCheckbox->ApplyChanges();
 	m_pColorRSlider->ApplyChanges();
 	m_pColorGSlider->ApplyChanges();
@@ -681,6 +708,7 @@ void CrosshairImagePanelCS::ApplyChanges()
 	m_pColorAlphaSlider->ApplyChanges();
 	m_pSizeSlider->ApplyChanges();
 	m_pThicknessSlider->ApplyChanges();
+	m_pGapSlider->ApplyChanges();
 
 	char cmd[256];
 	cmd[0] = 0;
@@ -690,6 +718,12 @@ void CrosshairImagePanelCS::ApplyChanges()
 		int val = m_pColorComboBox->GetActiveItem();
 		Q_snprintf( cmd, sizeof(cmd), "cl_crosshaircolor %d\n", val );
 		engine->ClientCmd_Unrestricted( cmd );
+	}
+
+	if (m_pStyleComboBox != NULL)
+	{
+		// Row 0 is Dynamic, row 1 is Static; write the value the HUD reads.
+		engine->ClientCmd_Unrestricted( m_pStyleComboBox->GetActiveItem() == 0 ? "cl_dynamiccrosshair 1\n" : "cl_dynamiccrosshair 0\n" );
 	}
 }
 

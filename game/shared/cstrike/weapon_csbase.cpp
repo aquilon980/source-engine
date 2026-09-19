@@ -333,6 +333,7 @@ LINK_ENTITY_TO_CLASS( weapon_cs_base, CWeaponCSBase );
 	ConVar cl_crosshairsize( "cl_crosshairsize", "5", FCVAR_CLIENTDLL | FCVAR_ARCHIVE );
 	ConVar cl_crosshairthickness( "cl_crosshairthickness", "0.5", FCVAR_CLIENTDLL | FCVAR_ARCHIVE );
 	ConVar cl_crosshairdot( "cl_crosshairdot", "0", FCVAR_CLIENTDLL | FCVAR_ARCHIVE );
+	ConVar cl_crosshairgap( "cl_crosshairgap", "0", FCVAR_CLIENTDLL | FCVAR_ARCHIVE, "Crosshair gap; 0 = use the weapon's default spread, >0 = fixed gap for static styles / added gap for dynamic styles" );
 	ConVar cl_crosshaircolor_r( "cl_crosshaircolor_r", "50", FCVAR_CLIENTDLL | FCVAR_ARCHIVE );
 	ConVar cl_crosshaircolor_g( "cl_crosshaircolor_g", "250", FCVAR_CLIENTDLL | FCVAR_ARCHIVE );
 	ConVar cl_crosshaircolor_b( "cl_crosshaircolor_b", "50", FCVAR_CLIENTDLL | FCVAR_ARCHIVE );
@@ -1224,6 +1225,27 @@ bool CWeaponCSBase::AllowsFreeAim() const
 				}
 			}
 			break;
+		}
+
+		// CS:GO/CS2-style crosshair gap. 0 keeps the weapon/accuracy derived
+		// gap; a positive value is a fixed gap for the static styles and an
+		// added base gap for the dynamic ones, so the crosshair can be tuned
+		// without touching the weapon scripts.
+		float flCrosshairGap = cl_crosshairgap.GetFloat();
+		if ( flCrosshairGap > 0.0f )
+		{
+			int iGap = MAX( 1, RoundFloatToInt( YRES( flCrosshairGap ) ) );
+			int iStyle = cl_dynamiccrosshair.GetInt();
+			if ( iStyle == 0 || iStyle == 3 )
+			{
+				// static: the gap is exactly what the player asked for
+				iCrosshairDistance = iGap;
+			}
+			else
+			{
+				// dynamic: keep the accuracy growth, just start from a wider base
+				iCrosshairDistance += iGap;
+			}
 		}
 
 		int iCenterX = ScreenWidth() / 2;
