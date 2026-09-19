@@ -1547,12 +1547,16 @@ const Vector *CCSBotManager::GetRandomPositionInZone( const Zone *zone ) const
 		return NULL;
 
 	// pick a location inside both the nav area and the zone
-	/// @todo Randomize this
-
 	if (zone->m_isLegacy)
 	{
-		/// @todo It is possible that the radius might not overlap this area at all...
-		area->GetClosestPointOnArea( zone->m_center, &pos );
+		// pick a random point inside the zone's radius, then snap it onto the
+		// area. Stock returned the point nearest the zone centre, so every bot
+		// in the zone always went to the same place.
+		Vector target = zone->m_center;
+		const float legacyRange = 256.0f;
+		target.x += RandomFloat( -legacyRange, legacyRange );
+		target.y += RandomFloat( -legacyRange, legacyRange );
+		area->GetClosestPointOnArea( target, &pos );
 	}
 	else
 	{
@@ -1564,8 +1568,21 @@ const Vector *CCSBotManager::GetRandomPositionInZone( const Zone *zone ) const
 		overlap.hi.x = MIN( areaExtent.hi.x, zone->m_extent.hi.x );
 		overlap.hi.y = MIN( areaExtent.hi.y, zone->m_extent.hi.y );
 
-		pos.x = (overlap.lo.x + overlap.hi.x)/2.0f;
-		pos.y = (overlap.lo.y + overlap.hi.y)/2.0f;
+		// a random point inside the area/zone overlap, so plant, search and
+		// guard positions vary from round to round instead of always landing on
+		// the overlap's midpoint (stock) - fall back to that midpoint if the
+		// extents don't actually overlap
+		if ( overlap.lo.x <= overlap.hi.x && overlap.lo.y <= overlap.hi.y )
+		{
+			pos.x = RandomFloat( overlap.lo.x, overlap.hi.x );
+			pos.y = RandomFloat( overlap.lo.y, overlap.hi.y );
+		}
+		else
+		{
+			pos.x = (overlap.lo.x + overlap.hi.x)/2.0f;
+			pos.y = (overlap.lo.y + overlap.hi.y)/2.0f;
+		}
+
 		pos.z = area->GetZ( pos );
 	}
 

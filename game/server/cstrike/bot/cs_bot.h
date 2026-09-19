@@ -491,6 +491,9 @@ public:
 	bool IsMovingTo( void ) const;								///< return true if we are in the MoveTo state
 
 	void PlantBomb( void );
+	const Vector *GetPlantSpot( void );							///< choose (once per round) a deliberate spot inside the bomb zone to plant at
+	bool IsAtPlantSpot( void );									///< true once we're at the chosen plant spot (or gave up getting there)
+	bool ShouldSneakToPlant( void ) const;						///< true if this bot chose a quiet final approach to its plant spot
 
 	void FetchBomb( void );										///< bomb has been dropped - go get it
 	bool NoticeLooseBomb( void ) const;							///< return true if we noticed the bomb on the ground or on radar
@@ -1062,6 +1065,12 @@ private:
 	byte m_hostageEscortCount;										///< the number of hostages we're currently escorting
 	void UpdateHostageEscortCount( void );							///< periodic check of hostage count in case we lost some
 	float m_hostageEscortCountTimestamp;
+
+	//- bomb plant spot: bots pick a deliberate, varied spot instead of planting where they cross the zone edge ------
+	Vector m_plantSpot;												///< chosen position inside the bomb zone to plant at
+	float m_plantSpotTimestamp;										///< when we chose it (we plant in place if we can't get there)
+	bool m_hasPlantSpot;											///< have we chosen a plant spot this round?
+	bool m_sneakToPlant;											///< quietly walk the final approach to the plant spot
 
 	int m_desiredTeam;												///< the team we want to be on
 	bool m_hasJoined;												///< true if bot has actually joined the game

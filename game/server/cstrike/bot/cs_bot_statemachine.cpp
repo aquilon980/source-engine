@@ -588,6 +588,69 @@ void CCSBot::PlantBomb( void )
 
 //--------------------------------------------------------------------------------------------------------------
 /**
+ * Choose the spot we'll walk to and plant the bomb at.
+ *
+ * Stock bots plant the instant they clip the edge of a bomb zone, so plants
+ * cluster at site entrances. Humans walk in and pick a spot. We choose a random
+ * position inside the zone (some bots instead decide to plant right where they
+ * stand), remember it for the round, and walk there before planting.
+ * Returns NULL when we aren't standing in a bomb zone.
+ */
+const Vector *CCSBot::GetPlantSpot( void )
+{
+	const CCSBotManager::Zone *zone = TheCSBots()->GetZone( GetAbsOrigin() );
+	if ( zone == NULL )
+		return NULL;
+
+	// reuse the spot we already chose, as long as we're still in the same zone
+	if ( m_hasPlantSpot && TheCSBots()->GetZone( m_plantSpot ) == zone )
+		return &m_plantSpot;
+
+	// most bots walk to a deliberate spot; the rest plant right where they are
+	const float pickSpotChance = 70.0f;
+	const Vector *pos = ( RandomFloat( 0.0f, 100.0f ) < pickSpotChance ) ? TheCSBots()->GetRandomPositionInZone( zone ) : NULL;
+
+	m_plantSpot = pos ? *pos : GetAbsOrigin();
+	m_plantSpotTimestamp = gpGlobals->curtime;
+	m_hasPlantSpot = true;
+
+	return &m_plantSpot;
+}
+
+
+//--------------------------------------------------------------------------------------------------------------
+/**
+ * True once we've reached the chosen plant spot, or have spent long enough
+ * trying that we should just plant where we stand (covers a spot we can't
+ * actually path to).
+ */
+bool CCSBot::IsAtPlantSpot( void )
+{
+	if ( !m_hasPlantSpot )
+		return true;	// never chose one - plant where we are
+
+	const float plantSpotRange = 100.0f;
+	const float plantSpotTimeout = 10.0f;
+
+	if ( ( GetAbsOrigin() - m_plantSpot ).Length2D() < plantSpotRange )
+		return true;
+
+	if ( gpGlobals->curtime - m_plantSpotTimestamp > plantSpotTimeout )
+		return true;
+
+	return false;
+}
+
+
+//--------------------------------------------------------------------------------------------------------------
+bool CCSBot::ShouldSneakToPlant( void ) const
+{
+	return m_sneakToPlant;
+}
+
+
+//--------------------------------------------------------------------------------------------------------------
+/**
  * Bomb has been dropped - go get it
  */
 void CCSBot::FetchBomb( void )

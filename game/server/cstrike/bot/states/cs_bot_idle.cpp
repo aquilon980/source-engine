@@ -165,6 +165,20 @@ void IdleState::OnUpdate( CCSBot *me )
 					// if we're at a bomb site, plant the bomb
 					if (me->IsAtBombsite())
 					{
+						// humans don't plant the instant they clip the zone edge -
+						// they walk to a spot. Choose one (varied) and go there first.
+						const Vector *spot = me->GetPlantSpot();
+						if (spot && !me->IsAtPlantSpot())
+						{
+							me->SetTask( CCSBot::PLANT_BOMB );
+							if (me->ShouldSneakToPlant())
+								me->Walk();
+							else
+								me->Run();
+							me->MoveTo( *spot, FASTEST_ROUTE );
+							return;
+						}
+
 						// plant it
 						me->SetTask( CCSBot::PLANT_BOMB );
 						me->PlantBomb();

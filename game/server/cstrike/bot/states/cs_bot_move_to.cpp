@@ -21,7 +21,14 @@
  */
 void MoveToState::OnEnter( CCSBot *me )
 {
-	if (me->IsUsingKnife() && me->IsWellPastSafe() && !me->IsHurrying())
+	if (me->GetTask() == CCSBot::PLANT_BOMB && me->ShouldSneakToPlant() && me->IsAtBombsite())
+	{
+		// quiet final approach so the enemy doesn't hear us commit to the plant.
+		// IsAtBombsite() keeps this to the last stretch inside the site - the
+		// long walk in from across the map stays a run.
+		me->Walk();
+	}
+	else if (me->IsUsingKnife() && me->IsWellPastSafe() && !me->IsHurrying())
 	{
 		me->Walk();
 	}

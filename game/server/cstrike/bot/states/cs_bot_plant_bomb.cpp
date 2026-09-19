@@ -56,9 +56,10 @@ void PlantBombState::OnUpdate( CCSBot *me )
 	// if we no longer have the C4, we've successfully planted
 	if (!me->HasC4())
 	{
-		// move to a hiding spot and watch the bomb
+		// stay close to the bomb and hold the angle - humans defend the plant,
+		// they don't wander off across the map (holdPosition camps the spot)
 		me->SetTask( CCSBot::GUARD_TICKING_BOMB );
-		me->Hide();
+		me->Hide( TheNavMesh->GetNavArea( me->GetAbsOrigin() ), -1.0f, 500.0f, true );
 	}
 
 	// if we time out, it's because we slipped into a non-plantable area

@@ -204,6 +204,15 @@ void CCSBot::ResetValues( void )
 
 	m_wasSafe = true;
 
+	// fresh plant-spot decision each round
+	m_hasPlantSpot = false;
+	m_plantSpotTimestamp = 0.0f;
+	m_plantSpot = vec3_origin;
+
+	// some bots quietly walk the final approach to the plant so the enemy
+	// doesn't hear them commit
+	m_sneakToPlant = ( RandomFloat( 0.0f, 100.0f ) < 35.0f );
+
 	m_nearbyEnemyCount = 0;
 	m_enemyPlace = 0;
 	m_nearbyFriendCount = 0;
