@@ -510,6 +510,17 @@ void BuyState::OnUpdate( CCSBot *me )
 				me->PrintIfWatched( "Tried to buy preferred weapon %s.\n", buyAlias );
 				isPreferredAllDisallowed = false;
 			}
+			else
+			{
+				// this preference is disallowed by the server's weapon settings.
+				// Advance to the next preference and re-evaluate next tick instead
+				// of falling straight through to a random buy, so a bot whose top
+				// pick is banned still gets its second choice. The random-buy
+				// fallback below only fires once every preference has been tried.
+				++m_prefIndex;
+				m_prefRetries = 0;
+				return;
+			}
 
 			++m_prefRetries;
 

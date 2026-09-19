@@ -1218,15 +1218,20 @@ void CCSBotManager::MaintainBotQuota( void )
 				int numDeadCT;
 				CSGameRules()->InitializePlayerCounts( numAliveTerrorist, numAliveCT, numDeadTerrorist, numDeadCT );
 
+				// compare total team sizes: alive-only versus m_iNumCT (which
+				// counts the dead too) could never trigger once players died
+				const int numTerrorist = numAliveTerrorist + numDeadTerrorist;
+				const int numCT = numAliveCT + numDeadCT;
+
 				if ( !FStrEq( cv_bot_join_team.GetString(), "T" ) &&
 					 !FStrEq( cv_bot_join_team.GetString(), "CT" ) )
 				{
-					if ( numAliveTerrorist > CSGameRules()->m_iNumCT + 1 )
+					if ( numTerrorist > numCT + 1 )
 					{
 						if ( UTIL_KickBotFromTeam( TEAM_TERRORIST ) )
 							return;
 					}
-					else if ( numAliveCT > CSGameRules()->m_iNumTerrorist + 1 )
+					else if ( numCT > numTerrorist + 1 )
 					{
 						if ( UTIL_KickBotFromTeam( TEAM_CT ) )
 							return;
@@ -1536,6 +1541,10 @@ const Vector *CCSBotManager::GetRandomPositionInZone( const Zone *zone ) const
 
 	// pick a random overlapping area
 	CNavArea *area = GetRandomAreaInZone(zone);
+
+	// a zone whose areas are all jump areas has no usable area to stand on
+	if (area == NULL)
+		return NULL;
 
 	// pick a location inside both the nav area and the zone
 	/// @todo Randomize this

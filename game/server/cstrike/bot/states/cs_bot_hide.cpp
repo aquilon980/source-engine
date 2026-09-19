@@ -514,7 +514,7 @@ void HideState::OnUpdate( CCSBot *me )
 
 				// hide where we are
 				m_hidingSpot.x = myOrigin.x;
-				m_hidingSpot.x = myOrigin.y;
+				m_hidingSpot.y = myOrigin.y;
 				m_hidingSpot.z = me->GetFeetZ();
 			}
 			else
