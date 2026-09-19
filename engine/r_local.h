@@ -24,7 +24,6 @@ extern	int		d_lightstyleframe[256];	// Frame when the light style value changed
 extern	int		d_lightstylenumframes[256]; // number of frames in the lightstyle
 extern ConVar	r_lightmapcolorscale;
 extern ConVar	r_decals;
-extern ConVar	mp_decals;
 extern ConVar	r_lightmap;
 extern ConVar	r_lightstyle;
 

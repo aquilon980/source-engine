@@ -48,7 +48,6 @@ private:
 	vgui::ComboBox				*m_pSoundQualityCombo;
 	CCvarSlider					*m_pSFXSlider;
 	CCvarSlider					*m_pMusicSlider;
-	vgui::ComboBox				*m_pCloseCaptionCombo;
 	bool						   m_bRequireRestart;
    
    vgui::ComboBox				*m_pSpokenLanguageCombo;

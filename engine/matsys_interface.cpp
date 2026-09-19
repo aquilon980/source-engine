@@ -102,7 +102,6 @@ void WorldStaticMeshDestroy( void );
 
 ConVar	r_norefresh( "r_norefresh","0");
 ConVar	r_decals( "r_decals", "2048" );
-ConVar	mp_decals( "mp_decals","200", FCVAR_ARCHIVE);
 ConVar	r_lightmap( "r_lightmap", "-1", FCVAR_CHEAT | FCVAR_MATERIAL_SYSTEM_THREAD );
 ConVar	r_lightstyle( "r_lightstyle","-1", FCVAR_CHEAT | FCVAR_MATERIAL_SYSTEM_THREAD );
 ConVar	r_dynamic( "r_dynamic","1");

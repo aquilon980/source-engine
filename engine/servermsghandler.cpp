@@ -348,15 +348,6 @@ bool CClientState::ProcessServerInfo( SVC_ServerInfo *msg )
 	//  the client is probably cheating.
 	V_memcpy( serverMD5.bits, msg->m_nMapMD5.bits, MD5_DIGEST_LENGTH );
 
-	// Multiplayer game?
-	if ( m_nMaxClients > 1 )	
-	{
-		if ( mp_decals.GetInt() < r_decals.GetInt() )
-		{
-			r_decals.SetValue( mp_decals.GetInt() );
-		}
-	}
-
 	g_ClientGlobalVariables.maxClients = m_nMaxClients;
 	g_ClientGlobalVariables.network_protocol = msg->m_nProtocol;
 

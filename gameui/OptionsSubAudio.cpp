@@ -42,11 +42,6 @@ COptionsSubAudio::COptionsSubAudio(vgui::Panel *parent) : PropertyPage(parent, N
 	m_pSFXSlider = new CCvarSlider( this, "SFXSlider", "#GameUI_SoundEffectVolume", 0.0f, 1.0f, "volume" );
 	m_pMusicSlider = new CCvarSlider( this, "MusicSlider", "#GameUI_MusicVolume", 0.0f, 1.0f, "Snd_MusicVolume" );
 	
-	m_pCloseCaptionCombo = new ComboBox( this, "CloseCaptionCheck", 6, false );
-	m_pCloseCaptionCombo->AddItem( "#GameUI_NoClosedCaptions", NULL );
-	m_pCloseCaptionCombo->AddItem( "#GameUI_SubtitlesAndSoundEffects", NULL );
-	m_pCloseCaptionCombo->AddItem( "#GameUI_Subtitles", NULL );
-
 	m_pSoundQualityCombo = new ComboBox( this, "SoundQuality", 6, false );
 	m_pSoundQualityCombo->AddItem( "#GameUI_High", new KeyValues("SoundQuality", "quality", SOUNDQUALITY_HIGH) );
 	m_pSoundQualityCombo->AddItem( "#GameUI_Medium", new KeyValues("SoundQuality", "quality", SOUNDQUALITY_MEDIUM) );
@@ -87,25 +82,6 @@ void COptionsSubAudio::OnResetData()
 
 
 	// reset the combo boxes
-
-	// close captions
-	ConVarRef closecaption("closecaption");
-	ConVarRef cc_subtitles("cc_subtitles");
-	if (closecaption.GetBool())
-	{
-		if (cc_subtitles.GetBool())
-		{
-			m_pCloseCaptionCombo->ActivateItem(2);
-		}
-		else
-		{
-			m_pCloseCaptionCombo->ActivateItem(1);
-		}
-	}
-	else
-	{
-		m_pCloseCaptionCombo->ActivateItem(0);
-	}
 
 	// speakers
 	ConVarRef snd_surround_speakers("Snd_Surround_Speakers");
@@ -219,38 +195,6 @@ void COptionsSubAudio::OnApplyChanges()
 {
 	m_pSFXSlider->ApplyChanges();
 	m_pMusicSlider->ApplyChanges();
-
-	// set the cvars appropriately
-	// Tracker 28933:  Note we can't do this because closecaption is marked
-	//  FCVAR_USERINFO and it won't get sent to server is we direct set it, we
-	//  need to pass it along to the engine parser!!!
-	// ConVar *closecaption = (ConVar *)cvar->FindVar("closecaption");
-	int closecaption_value = 0;
-
-	ConVarRef cc_subtitles( "cc_subtitles" );
-	switch (m_pCloseCaptionCombo->GetActiveItem())
-	{
-	default:
-	case 0:
-		closecaption_value = 0;
-		cc_subtitles.SetValue( 0 );
-		break;
-	case 1:
-		closecaption_value = 1;
-		cc_subtitles.SetValue( 0 );
-		break;
-	case 2:
-		closecaption_value = 1;
-		cc_subtitles.SetValue( 1 );
-		break;
-	}
-
-	// Stuff the close caption change to the console so that it can be
-	//  sent to the server (FCVAR_USERINFO) so that you don't have to restart
-	//  the level for the change to take effect.
-	char cmd[ 64 ];
-	Q_snprintf( cmd, sizeof( cmd ), "closecaption %i\n", closecaption_value );
-	engine->ClientCmd_Unrestricted( cmd );
 
 	ConVarRef snd_surround_speakers( "Snd_Surround_Speakers" );
 	int speakers = m_pSpeakerSetupCombo->GetActiveItemUserData()->GetInt( "speakers" );
