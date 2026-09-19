@@ -235,6 +235,115 @@ void CCSBot::Upkeep( void )
 
 //--------------------------------------------------------------------------------------------------------------
 /**
+ * Human fidgeting during the freeze period: glance around spawn, cycle through
+ * weapons like a player spamming slots, occasionally duck. Every bot rolled
+ * its own m_fidgetChance at spawn, so some stand statue-still while others
+ * can't stop touching their guns. Called every frame from BuyState once
+ * buying is done and the freeze still holds.
+ */
+void CCSBot::UpdateFreezetimeFidget( void )
+{
+	if (gpGlobals->curtime < m_nextFidgetTime)
+		return;
+
+	// eagerness check: calm bots mostly sit this one out
+	if (RandomFloat( 0.0f, 1.0f ) > m_fidgetChance)
+	{
+		m_nextFidgetTime = gpGlobals->curtime + RandomFloat( 0.8f, 2.0f );
+		return;
+	}
+
+	float roll = RandomFloat( 0.0f, 1.0f );
+
+	if (roll < 0.55f)
+	{
+		// glance around spawn, off our forward view, roughly chest height
+		Vector eye = EyePositionConst();
+		float yaw = m_lookAheadAngle + RandomFloat( -120.0f, 120.0f );
+		Vector dir;
+		AngleVectors( QAngle( 0.0f, yaw, 0.0f ), &dir );
+		Vector target = eye + dir * RandomFloat( 400.0f, 800.0f );
+		target.z += RandomFloat( -15.0f, 25.0f );
+		SetLookAt( "Freezetime glance", target, PRIORITY_LOW, RandomFloat( 0.5f, 1.5f ) );
+	}
+	else if (roll < 0.85f)
+	{
+		// cycle slots: knife -> pistol -> primary -> knife
+		if (IsUsingKnife())
+		{
+			if (RandomFloat( 0.0f, 1.0f ) < 0.5f)
+				EquipPistol( MUST_EQUIP );
+			else
+				EquipBestWeapon( MUST_EQUIP );
+		}
+		else if (IsUsingPistol())
+		{
+			if (RandomFloat( 0.0f, 1.0f ) < 0.5f)
+				EquipKnife();
+			else
+				EquipBestWeapon( MUST_EQUIP );
+		}
+		else
+		{
+			if (RandomFloat( 0.0f, 1.0f ) < 0.5f)
+				EquipKnife();
+			else
+				EquipPistol( MUST_EQUIP );
+		}
+		m_lastFidgetSwapTime = gpGlobals->curtime;
+	}
+	else
+	{
+		// shift weight: duck down or pop back up (stood back up when the freeze ends)
+		if (m_fidgetCrouched)
+		{
+			StandUp();
+			m_fidgetCrouched = false;
+		}
+		else
+		{
+			Crouch();
+			m_fidgetCrouched = true;
+		}
+	}
+
+	// fidgety bots fidget often; cadence stays human, never machine-gun spam
+	m_nextFidgetTime = gpGlobals->curtime + RandomFloat( 0.7f, 2.5f ) - 0.5f * m_fidgetChance;
+}
+
+
+//--------------------------------------------------------------------------------------------------------------
+/**
+ * True shortly after a fidget weapon swap, so the fidget gun reads on screen
+ * instead of instantly snapping back to the primary.
+ */
+bool CCSBot::IsFidgetHoldingWeapon( void ) const
+{
+	return (gpGlobals->curtime - m_lastFidgetSwapTime < 2.5f);
+}
+
+
+//--------------------------------------------------------------------------------------------------------------
+/**
+ * The freeze just ended: boots on, gun up, and maybe a beat late like a
+ * human tabbing back in. Called once from BuyState before going Idle.
+ */
+void CCSBot::FinishFreezetimeFidget( void )
+{
+	StandUp();
+	m_fidgetCrouched = false;
+	EquipBestWeapon( MUST_EQUIP );
+
+	if (m_freezeBreakDelay > 0.0f)
+	{
+		Wait( m_freezeBreakDelay );
+		m_freezeBreakDelay = 0.0f;
+	}
+}
+
+
+//--------------------------------------------------------------------------------------------------------------
+/**
  * Heavyweight processing, invoked less often
  */
 void CCSBot::Update( void )

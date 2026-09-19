@@ -327,11 +327,30 @@ void BuyState::OnUpdate( CCSBot *me )
 	{
 		if (CSGameRules()->IsMultiplayer() && CSGameRules()->IsFreezePeriod())
 		{
+			if (cv_bot_human_fidget.GetBool())
+			{
+				me->UpdateFreezetimeFidget();
+
+				// let a fresh fidget swap read on screen instead of
+				// instantly snapping back to the primary
+				if (me->IsFidgetHoldingWeapon())
+				{
+					me->ResetStuckMonitor();
+					return;
+				}
+			}
+
 			// make sure we're locked and loaded
 			me->EquipBestWeapon( MUST_EQUIP );
 			me->Reload();
 			me->ResetStuckMonitor();
 			return;
+		}
+
+		if (cv_bot_human_fidget.GetBool())
+		{
+			// freeze is over: boots on, gun up, maybe a beat late
+			me->FinishFreezetimeFidget();
 		}
 
 		me->Idle();

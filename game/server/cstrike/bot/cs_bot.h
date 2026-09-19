@@ -746,6 +746,9 @@ public:
 	void UpdateLookAngles( void );									///< move actual view angles towards desired ones
 	void UpdateLookAround( bool updateNow = false );				///< update "looking around" mechanism
 	void InhibitLookAround( float duration );						///< block all "look at" and "looking around" behavior for given duration - just look ahead
+	void UpdateFreezetimeFidget( void );								///< human fidget: look around, cycle weapons, shift about during the freeze period
+	bool IsFidgetHoldingWeapon( void ) const;						///< human fidget: true shortly after a fidget weapon swap (keeps the fidget gun out briefly)
+	void FinishFreezetimeFidget( void );								///< human fidget: freeze just ended - stand up, re-arm, maybe break late
 
 	/// @todo Clean up notion of "forward angle" and "look ahead angle"
 	void SetForwardAngle( float angle );							///< define our forward facing
@@ -1041,6 +1044,12 @@ private:
 
 	CountdownTimer m_mustRunTimer;									///< if nonzero, bot cannot walk
 	CountdownTimer m_waitTimer;										///< if nonzero, we are waiting where we are
+
+	float m_fidgetChance;										///< human fidget: 0..1 eagerness for freezetime/round-start fidgeting, rolled fresh every spawn
+	float m_nextFidgetTime;										///< human fidget: earliest time we'll start another fidget (freeze look/swap) or teammate glance
+	float m_lastFidgetSwapTime;									///< human fidget: when we last swapped weapons while fidgeting (holds the fidget gun briefly)
+	float m_freezeBreakDelay;									///< human fidget: staggered freeze-break pause, consumed when the freeze ends
+	bool m_fidgetCrouched;										///< human fidget: true while a fidget duck is held (stood back up at freeze end)
 
 	void UpdateTravelDistanceToAllPlayers( void );					///< periodically compute shortest path distance to each player
 	CountdownTimer m_updateTravelDistanceTimer;						///< for throttling travel distance computations

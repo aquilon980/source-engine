@@ -811,6 +811,30 @@ void CCSBot::UpdateLookAround( bool updateNow )
 	}
 
 	//
+	// Human fidget: at round start, walking out with the team, glance at
+	// nearby teammates the way players check who's around them. Only while
+	// safe and actually moving (the hiding branch above owns the still case),
+	// so combat and camping stares are untouched.
+	//
+	if (cv_bot_human_fidget.GetBool() && IsSafe() && !IsAtHidingSpot() && !IsNotMoving( 1.0f ) && !IsLookingAtSpot( PRIORITY_LOW ))
+	{
+		if (gpGlobals->curtime >= m_nextFidgetTime)
+		{
+			CCSPlayer *pal = GetClosestVisibleFriend();
+			if (pal && pal->IsAlive() && (GetCentroid( pal ) - GetAbsOrigin()).IsLengthLessThan( 800.0f ) &&
+				RandomFloat( 0.0f, 1.0f ) < m_fidgetChance)
+			{
+				SetLookAt( "Teammate glance", GetCentroid( pal ), PRIORITY_LOW, RandomFloat( 0.6f, 1.2f ), true );
+				m_nextFidgetTime = gpGlobals->curtime + RandomFloat( 2.0f, 5.0f );
+			}
+			else
+			{
+				m_nextFidgetTime = gpGlobals->curtime + RandomFloat( 1.0f, 2.5f );
+			}
+		}
+	}
+
+	//
 	// Glance at "encouter spots" as we move past them
 	//
 	if (m_spotEncounter)

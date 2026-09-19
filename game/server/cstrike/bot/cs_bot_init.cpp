@@ -81,6 +81,7 @@ ConVar cv_bot_auto_follow( "bot_auto_follow", "0", FCVAR_REPLICATED, "If nonzero
 ConVar cv_bot_flipout( "bot_flipout", "0", FCVAR_REPLICATED | FCVAR_CHEAT, "If nonzero, bots use no CPU for AI. Instead, they run around randomly." );
 ConVar cv_bot_human_strafe( "bot_human_strafe", "1", FCVAR_REPLICATED, "If nonzero, bots make reactive, human-like strafing decisions in combat (juke when tracked, hold still to shoot)." );
 ConVar cv_bot_tactical_grenades( "bot_tactical_grenades", "1", FCVAR_REPLICATED, "If nonzero, bots use grenades tactically in combat: flash setups before re-peeking, HE to flush entrenched enemies, smoke for cover when outnumbered or scoped." );
+ConVar cv_bot_human_fidget( "bot_human_fidget", "1", FCVAR_REPLICATED, "If nonzero, bots act human outside combat: look around and cycle weapons during freezetime, glance at teammates while walking out at round start, and stagger their freeze-break so the team doesn't move as one." );
 
 
 extern void FinishClientPutInServer( CCSPlayer *pPlayer );
@@ -208,6 +209,18 @@ void CCSBot::ResetValues( void )
 	m_nearbyFriendCount = 0;
 	m_closestVisibleFriend = NULL;
 	m_closestVisibleHumanFriend = NULL;
+
+	// human fidget personality, fresh every spawn: most bots fidget a little,
+	// some never do, a few can't stand still
+	m_fidgetChance = RandomFloat( 0.0f, 1.0f );
+	m_fidgetChance *= m_fidgetChance;	// bias towards calm: ~25% fidget often, ~25% almost never
+	m_nextFidgetTime = 0.0f;
+	m_lastFidgetSwapTime = -999.0f;
+	m_fidgetCrouched = false;
+
+	// staggered freeze-break: most bots go on time, some hesitate like humans
+	// tabbing back in or finishing a buy click
+	m_freezeBreakDelay = (RandomFloat( 0.0f, 1.0f ) < 0.65f) ? 0.0f : RandomFloat( 0.15f, 0.9f );
 
 	for( int w=0; w<MAX_PLAYERS; ++w )
 	{
