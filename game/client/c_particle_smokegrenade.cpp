@@ -41,8 +41,16 @@ static Vector s_FadePlaneDirections[] =
 // This is used to randomize the direction it chooses to move a particle in.
 int g_OffsetLookup[3] = {-1,0,1};
 
+// Fraction of the cloud's half-height that the ellipsoid centre sits above the
+// ground (see FillVolume). Below 1 the bottom of the ball is buried, so the
+// per-column ground clamp flattens it into a base that rests on the floor —
+// the cloud sits *on* the ground instead of balancing on its lowest point and
+// reading as a hovering ball. 1.0 restores the old bottom-just-above-ground
+// placement.
+#define SMOKE_GROUND_SEAT		0.72f
+
 // Bullet holes: how much of the puff's rendered half-size pads the carve (the
-// soft edge of the sphere) and how far past that the edge feathers — live
+// soft edge of the tunnel) and how far past that the edge feathers — live
 // cvars (smoke_hole_pad / smoke_hole_fatten), so the hole can be dialled
 // without a rebuild.
 
@@ -54,8 +62,9 @@ static ConVar smoke_reactive_enable( "smoke_reactive_enable", "1", FCVAR_ARCHIVE
 // Radius of an AK-47-class round (base damage 36). Bigger calibers scale up,
 // smaller down — CS2 opens large holes for the AWP/Deagle and pinpricks for
 // SMGs/pistols. See docs/smoke-cs2-audit.md. This is the *visible* hole radius:
-// the carve is a world-space sphere of this radius at the hit, feathered by the
-// puff half-size — a round cavity carved out of the volume, not a view cone.
+// the carve is a constant-radius world-space tunnel along the round's path,
+// feathered by the puff half-size — a round bore through the volume, not a
+// view cone that widens with depth.
 static ConVar smoke_bullet_radius( "smoke_bullet_radius", "14", FCVAR_ARCHIVE, "Visible bullet-hole radius for an AK-47-class round (others scale with damage).", true, 4.0f, true, 160.0f );
 static ConVar smoke_bullet_strength( "smoke_bullet_strength", "1.0", FCVAR_ARCHIVE, "How much smoke one bullet clears (0-1).", true, 0.0f, true, 1.0f );
 static ConVar smoke_bullet_recover( "smoke_bullet_recover", "1.4", FCVAR_ARCHIVE, "Seconds a bullet hole lives (open, hold, then refill).", true, 0.2f, true, 10.0f );
@@ -170,7 +179,9 @@ private:
 	// 0 = full smoke, 1 = fully cleared by a carve hole, at this world position.
 	float HoleSuppressAt( const Vector &vWorldPos, float flPuffRadius = 0.0f );
 	// Punch a round hole into the cloud (ring of MAX_CARVE_HOLES, oldest recycled).
-	void AddCarveHole( const Vector &vCenter, float flRadius, float flStrength, float flLife, bool bExplosion = false );
+	// Bullets pass the segment the round travelled; HE passes the blast centre as
+	// both segment endpoints.
+	void AddCarveHole( const Vector &vCenter, const Vector &vStart, const Vector &vEnd, float flRadius, float flStrength, float flLife, bool bExplosion = false );
 
 	void UpdateSmokeTrail( float fTimeDelta );
 	
@@ -273,20 +284,26 @@ private:
 	float				m_flBloomEase;			// 0-1 cubic-out bloom progress (drives puff inflation).
 	float				m_flFadeT;				// 0-1 global fade progress (drives patchy dissolve).
 	Vector				m_vecBaseLift;			// Ground-snap lift applied to the base every frame.
+	Vector				m_vDetonationPos;		// Where the grenade detonated (bloom wavefront origin).
 
 	// CS2-style reactive carve (see docs/smoke-reactive.md). A shot carves a
-	// round *sphere* out of the volume: each hole is a world-space centre and a
-	// visible radius, and at render time every puff whose drawn position lies
-	// inside that sphere has its alpha thinned. Because the shape is a sphere
-	// in world space — not a cone from the eye — the hole is round from any
-	// angle and keeps the same size through the cloud depth, which is what
-	// makes it read as the smoke being carved/deformed rather than a slab
-	// removed along the sight line. The hole pops open fast, holds, then
-	// shrinks back to nothing over the tail of its life (the CS2 curve);
-	// sustained fire keeps it open and widens it.
+	// round *tunnel* through the volume: each hole stores the world-space
+	// segment the round travelled (plus the path point nearest the cloud centre
+	// for merging), and at render time every puff within a radius of that
+	// segment has its alpha thinned. A tunnel — not a sphere at the hit — is
+	// what lets a shot actually open a hole you can see through: a sphere
+	// clears only the cells at the impact depth, while the cards in front of
+	// and behind it overdraw the gap shut (the same trap documented in
+	// AGENTS.md). Because the tunnel is anchored to the bullet's path in world
+	// space — not a cone from the eye — its radius is constant with depth, so
+	// the hole never balloons. The hole pops open fast, holds, then shrinks
+	// back to nothing over the tail of its life (the CS2 curve); sustained
+	// fire keeps it open and widens it.
 	struct SmokeHole_t
 	{
-		Vector	vCenter;
+		Vector	vCenter;		// bullet: path point nearest the cloud centre (merge/debug); HE: blast centre
+		Vector	vStart;			// bullet: the segment the round actually travelled
+		Vector	vEnd;
 		bool	bExplosion;
 		float	flRadius;		// full (target) radius at the widest point
 		float	flStrength;		// 0..1 how clear it gets
@@ -299,13 +316,15 @@ private:
 	int					m_nCarveHoles;
 
 	// Per-frame cache of the live holes: the animated radius and the world
-	// centre, so RenderParticles does one ConVar read per frame instead of
-	// re-deriving them per puff. Both carve shapes are world-space spheres now,
-	// so no per-hole view transform is needed.
+	// shape, so RenderParticles does one ConVar read per frame instead of
+	// re-deriving them per puff. Both carve shapes are world-space now, so no
+	// per-hole view transform is needed.
 	struct SmokeHoleView_t
 	{
 		bool	bExplosion;
 		Vector	vWorldCenter;
+		Vector	vStart;			// bullet: carve segment (HE: unused)
+		Vector	vEnd;
 		float	flCurRadius;	// animated radius right now
 		float	flStrength;
 	};
@@ -454,6 +473,7 @@ C_ParticleSmokeGrenade::C_ParticleSmokeGrenade()
 	m_flBloomEase = 0;
 	m_flFadeT = 0;
 	m_vecBaseLift.Init();
+	m_vDetonationPos.Init();
 	m_FadeStartTime = 0;
 	m_FadeEndTime = 0;
 	m_flSpawnTime = 0;
@@ -583,10 +603,10 @@ void C_ParticleSmokeGrenade::ClientThink()
 		flFogAlpha *= clamp( m_ExpandRadius / ( m_SpacingRadius * 2.0f ), 0.0f, 1.0f );
 
 	// A carve hole you're looking through clears the screen fog too (two-way
-	// carve). The bullet hole is a view cone anchored at the eye, so sample a
-	// few points along the *view ray*: testing only the cloud centre cleared
-	// the fog just when the hole happened to line up behind it, not when you
-	// shoot a hole in the smoke directly in front of you.
+	// carve). The bullet tunnel runs along the shot, so sample a few points
+	// along the *view ray*: testing only the cloud centre cleared the fog just
+	// when the hole happened to line up behind it, not when you shoot a hole in
+	// the smoke directly in front of you.
 	float flHole = 0.0f;
 	{
 		Vector vEye = MainViewOrigin();
@@ -901,12 +921,12 @@ inline void C_ParticleSmokeGrenade::ApplyDynamicLight( const Vector &vParticlePo
 }
 
 
-// CS2-style carve, see docs/smoke-reactive.md. Every shot carves a round
-// sphere out of the cloud. The hole is stored as a world-space centre + radius;
-// at render (and fog) time we test the distance from a puff to that centre and
-// thin it inside the sphere. Both bullet holes and HE clears are world-space
-// spheres, so the shape is the same from every angle and never changes size
-// with cloud depth.
+// CS2-style carve, see docs/smoke-reactive.md. Every shot carves a round bore
+// out of the cloud along the segment the round travelled. The hole is stored as
+// a world-space segment + radius; at render (and fog) time we test the distance
+// from a puff to that segment and thin it inside the bore. Bullet tunnels and
+// HE blast spheres are both world-space, so the shape is the same from every
+// angle and never changes size with cloud depth.
 //
 // The hole's radius is animated each frame: it pops open in ~0.1s, holds, then
 // shrinks to nothing over the tail of its life. That is the curve CS2 (and the
@@ -945,6 +965,8 @@ void C_ParticleSmokeGrenade::BuildHoleViewCache()
 		SmokeHoleView_t &v = m_HoleView[m_nHoleView];
 		v.bExplosion = h.bExplosion;
 		v.vWorldCenter = h.vCenter;
+		v.vStart = h.vStart;
+		v.vEnd = h.vEnd;
 		v.flCurRadius = h.flRadius * flOpen * flClose;
 		v.flStrength = h.flStrength;
 
@@ -953,7 +975,8 @@ void C_ParticleSmokeGrenade::BuildHoleViewCache()
 }
 
 
-// Test a puff against the cached holes. Both shapes are world-space spheres.
+// Test a puff against the cached holes. Bullet holes are world-space tunnels
+// (segment + radius); HE clears are world-space spheres.
 float C_ParticleSmokeGrenade::HoleSuppressAtPoint( const Vector &vWorldPos, float flPuffRadius ) const
 {
 	float flBest = 0.0f;
@@ -978,13 +1001,18 @@ float C_ParticleSmokeGrenade::HoleSuppressAtPoint( const Vector &vWorldPos, floa
 			continue;
 		}
 
-		// Bullet: carve a sphere of flCurRadius at the hit. Fully thinned
-		// inside the radius, feathered out by the puff half-size so cards
-		// overlapping the opening soften instead of hard-cutting — the carve
-		// reads as the volume deforming. Because it is a world-space sphere it
-		// stays round and the same size at any range; the old view cone widened
-		// with cloud depth, which is what made single shots balloon.
-		float flDist = ( vWorldPos - h.vWorldCenter ).Length();
+		// Bullet: carve a constant-radius tunnel along the segment the round
+		// travelled. Fully thinned inside flCurRadius, feathered out by the
+		// puff half-size so cards overlapping the opening soften instead of
+		// hard-cutting — the carve reads as the volume deforming. The tunnel
+		// clears the full depth of the cloud at one radius, so the shot opens
+		// a hole you can actually see through; a sphere at the hit (the
+		// previous shape) only cleared the impact depth and the cards in front
+		// of and behind it overdrew the gap shut. Because it is a cylinder
+		// anchored to the bullet path in world space, the hole stays round and
+		// the same size at any range — the old view cone widened with cloud
+		// depth, which is what made single shots balloon.
+		float flDist = ReactiveSmokeDistPointToSegment( vWorldPos, h.vStart, h.vEnd );
 		float flFeather = MAX( 1.0f, flPuffRadius * smoke_hole_pad.GetFloat() * smoke_hole_fatten.GetFloat() );
 		float flOuter = h.flCurRadius + flFeather;
 		if ( flDist >= flOuter )
@@ -1029,12 +1057,13 @@ void C_ParticleSmokeGrenade::RenderParticles( CParticleRenderIterator *pIterator
 	BuildHoleViewCache();
 
 	// The cloud is lifted to sit on the ground, so the bloom has to radiate
-	// from the detonation point itself, not from that lifted centre —
-	// otherwise the smoke materialises in mid-air as a ball and swells,
-	// instead of growing up and out of the ground where it landed. The reach
-	// is fixed to the cloud's true extent (2 x half-height + a margin), not
-	// the falloff radius, or the top of the ball never gets revealed.
-	Vector vBloomOrigin = m_SmokeBasePos - m_vecBaseLift;
+	// from the detonation point itself — where the grenade world model landed
+	// — not from that lifted centre, otherwise the smoke materialises in
+	// mid-air as a ball and swells, instead of growing up and out of the
+	// ground where it landed. The reach is fixed to the cloud's true extent
+	// (2 x half-width + a margin), not the falloff radius, or the top of the
+	// ball never gets revealed.
+	Vector vBloomOrigin = m_vDetonationPos;
 	float flRevealBand = MAX( 1.0f, m_SpacingRadius * 0.5f );
 	float flRevealReachMax = m_SpacingRadius * 2.3f;
 
@@ -1046,8 +1075,10 @@ void C_ParticleSmokeGrenade::RenderParticles( CParticleRenderIterator *pIterator
 
 		// Draw. Ellipsoidal metric so the squashed cloud feathers evenly
 		// on all axes instead of ending in a dense flat top. The cloud is a
-		// ball centred on the lifted base (head height over the dirt) and
-		// measured against its full radius, not the growing bloom radius.
+		// dome seated on the ground — its centre sits 0.72 x half-height up,
+		// so the dense core lands at head height over a base resting on the
+		// dirt — and is measured against its full radius, not the growing
+		// bloom radius.
 		Vector vEll = pParticle->m_Pos;
 		vEll.z /= MAX( 0.3f, m_flHeightScale );
 		float len = vEll.Length();
@@ -1145,7 +1176,7 @@ void C_ParticleSmokeGrenade::RenderParticles( CParticleRenderIterator *pIterator
 			Vector tRenderPos;
 			TransformParticle(ParticleMgr()->GetModelView(), renderPos, tRenderPos);
 
-			// CS2-style reactive carve: carve a round sphere out of the volume.
+			// CS2-style reactive carve: carve a round bore out of the volume.
 			// Test the card's drawn position, not its local-space grid slot.
 			// Holes are event-driven, so a full-auto burst used to pulse the
 			// cloud as each shot opened a fresh hole. Smooth the per-puff
@@ -1279,6 +1310,7 @@ void C_ParticleSmokeGrenade::FillVolume()
 {
 	m_CurrentStage = 1;
 	m_SmokeBasePos = GetPos();
+	m_vDetonationPos = GetPos();	// Bloom wavefront origin: where the grenade landed.
 	m_SmokeTrail.SetEmit(false);
 	m_ExpandTimeCounter = m_ExpandRadius = 0;
 	m_flBloomEase = 0;
@@ -1339,9 +1371,14 @@ void C_ParticleSmokeGrenade::FillVolume()
 
 		if ( bHaveGround )
 		{
-			// Bottom row rests just above the dirt; Update() re-applies
-			// this lift every frame via m_SmokeBasePos.
-			m_vecBaseLift.Init( 0, 0, ( flGroundZ + flHz + 10.0f ) - m_SmokeBasePos.z );
+			// Sit the dome *on* the dirt: place the ellipsoid centre below its
+			// own half-height so the bottom of the ball is buried and the
+			// per-column ground clamp below flattens it into a base that rests
+			// on the floor. A ball balanced on its single lowest point (centre
+			// a full half-height up, which is what this used to do) read as
+			// hovering above the ground. Update() re-applies this lift every
+			// frame via m_SmokeBasePos.
+			m_vecBaseLift.Init( 0, 0, ( flGroundZ + flHz * SMOKE_GROUND_SEAT ) - m_SmokeBasePos.z );
 			m_SmokeBasePos += m_vecBaseLift;
 		}
 	}
@@ -1665,8 +1702,10 @@ void C_ParticleSmokeGrenade::CleanupToolRecordingState( KeyValues *msg )
 // the local copy of every active smoke, no server or networking changes.
 //-----------------------------------------------------------------------------
 // Punch a round hole into the cloud. Holes are kept in a small ring; the one
-// closest to refilling is recycled when full.
-void C_ParticleSmokeGrenade::AddCarveHole( const Vector &vCenter, float flRadius, float flStrength, float flLife, bool bExplosion )
+// closest to refilling is recycled when full. Bullets pass the segment the
+// round travelled (a constant-radius tunnel is carved along it); HE passes its
+// blast centre as both endpoints (the sphere test uses vCenter).
+void C_ParticleSmokeGrenade::AddCarveHole( const Vector &vCenter, const Vector &vStart, const Vector &vEnd, float flRadius, float flStrength, float flLife, bool bExplosion )
 {
 	// A full-auto burst used to add a brand-new hole per shot, so the cloud
 	// pulsed as holes popped open and the oldest slot got recycled onto a new
@@ -1690,6 +1729,8 @@ void C_ParticleSmokeGrenade::AddCarveHole( const Vector &vCenter, float flRadius
 				// widen the hole a step (capped), and take the stronger of
 				// the two.
 				h.vCenter = vCenter;						// follow the spray
+				h.vStart = vStart;							// and the path it drilled
+				h.vEnd = vEnd;
 				h.flRadius = MIN( MAX( h.flRadius, flRadius ) + flRadius * flGrow, flRadius * 2.5f + 8.0f );
 				h.flStrength = MAX( h.flStrength, MIN( 1.0f, flStrength ) );
 				h.flClose = MAX( 0.05f, flLife * 0.6f );
@@ -1714,6 +1755,8 @@ void C_ParticleSmokeGrenade::AddCarveHole( const Vector &vCenter, float flRadius
 
 	SmokeHole_t &h = m_CarveHoles[nSlot];
 	h.vCenter = vCenter;
+	h.vStart = vStart;
+	h.vEnd = vEnd;
 	h.bExplosion = bExplosion;
 	h.flRadius = flRadius;
 	h.flStrength = MIN( 1.0f, flStrength );
@@ -1767,14 +1810,18 @@ void C_ParticleSmokeGrenade::ApplyBulletSegment( const Vector &vecStart, const V
 	if ( flLen > flMaxOff )
 		vCenter = m_SmokeBasePos + vToCenter * ( flMaxOff / MAX( 1.0f, flLen ) );
 
-	// Bullet: carve a world-space sphere at the hit. The per-puff test feeds
-	// each card its rendered half-size as the sphere's soft edge, so cards
-	// overlapping the opening are thinned rather than hard-cut (that is what
-	// makes the carve read as deformation instead of a punched-out slab).
+	// Bullet: carve a constant-radius tunnel along the segment the round
+	// travelled. The per-puff test feeds each card its rendered half-size as
+	// the tunnel's soft edge, so cards overlapping the opening are thinned
+	// rather than hard-cut (that is what makes the carve read as deformation
+	// instead of a punched-out slab). A tunnel — not a sphere at the hit — is
+	// what actually opens a hole you can see through: it clears the full depth
+	// of the cloud in front of and behind the impact, where a sphere left the
+	// surrounding cards to overdraw the gap shut.
 	float flLife = MAX( 0.2f, smoke_bullet_recover.GetFloat() ) * flLifeScale;
-	AddCarveHole( vCenter, flRadius, flStrength, flLife, false );
+	AddCarveHole( vCenter, vecStart, vecEnd, flRadius, flStrength, flLife, false );
 	if ( smoke_debug.GetBool() )
-		Msg( "[smoke] bullet hole at (%.0f %.0f %.0f) r=%.0f (dmg %d), %d hole(s) live\n",
+		Msg( "[smoke] bullet tunnel at (%.0f %.0f %.0f) r=%.0f (dmg %d), %d hole(s) live\n",
 			vCenter.x, vCenter.y, vCenter.z, flRadius, iDamage, m_nCarveHoles );
 }
 
@@ -1798,7 +1845,7 @@ void C_ParticleSmokeGrenade::ApplyExplosion( const Vector &vecCenter )
 	// shaped in world space at the blast (see docs/smoke-cs2-audit.md).
 	if ( smoke_debug.GetBool() )
 		Msg( "[smoke] HE clear at (%.0f %.0f %.0f) r=%.0f\n", vecCenter.x, vecCenter.y, vecCenter.z, flRadius );
-	AddCarveHole( vecCenter, flRadius, flStrength, MAX( 0.5f, smoke_he_recover.GetFloat() ), true );
+	AddCarveHole( vecCenter, vecCenter, vecCenter, flRadius, flStrength, MAX( 0.5f, smoke_he_recover.GetFloat() ), true );
 }
 
 
