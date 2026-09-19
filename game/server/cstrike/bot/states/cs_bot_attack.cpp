@@ -46,6 +46,12 @@ void AttackState::OnEnter( CCSBot *me )
 
 	m_pinnedDownTimestamp = gpGlobals->curtime + RandomFloat( 7.0f, 10.0f );
 
+	// posture/fight bookkeeping for the "don't stand still" pass
+	m_crouchHoldUntil = 0.0f;
+	m_crouchRecheckTimestamp = gpGlobals->curtime + RandomFloat( 2.0f, 5.0f );
+	m_fightStartTimestamp = gpGlobals->curtime;
+	m_nextRepositionTime = gpGlobals->curtime + RandomFloat( 4.0f, 8.0f );
+
 	m_shieldToggleTimestamp = gpGlobals->curtime + RandomFloat( 2.0f, 10.0f );
 	m_shieldForceOpen = false;
 
@@ -59,57 +65,18 @@ void AttackState::OnEnter( CCSBot *me )
 		m_crouchAndHold = false;
 		me->StandUp();
 	}
-	else if (me->CanSeeSniper() && !me->IsSniper())
+	else if (enemy)
 	{
-		// don't sit still if we see a sniper!
-		m_crouchAndHold = false;
-		me->StandUp();
+		// decide whether to crouch where we are, or run and gun
+		ConsiderCrouchAndHold( me, enemy );
 	}
-	else
+
+	// CCSBot::Attack() pre-sets crouch-and-hold when we fire from a hiding
+	// spot. Give that the same timed beat (a little longer - we're camping),
+	// or OnUpdate would stand us up on the very first frame.
+	if (m_crouchAndHold && m_crouchHoldUntil <= 0.0f)
 	{
-		// decide whether to crouch where we are, or run and gun (if we havent already - see CCSBot::Attack())
-		if (!m_crouchAndHold)
-		{
-			if (enemy)
-			{
-				const float crouchFarRange = 750.0f;
-				float crouchChance;
-				
-				// more likely to crouch if using sniper rifle or if enemy is far away
-				if (me->IsUsingSniperRifle())
-					crouchChance = 50.0f;
-				else if ((GetCentroid( me ) - GetCentroid( enemy )).IsLengthGreaterThan( crouchFarRange ))
-					crouchChance = 50.0f;
-				else
-					crouchChance = 20.0f * (1.0f - me->GetProfile()->GetAggression());
-
-				if (RandomFloat( 0.0f, 100.0f ) < crouchChance)
-				{
-					// make sure we can still see if we crouch
-					trace_t result;
-
-					Vector origin = GetCentroid( me );
-					if (!me->IsCrouching())
-					{
-						// we are standing, adjust for lower crouch origin
-						origin.z -= 20.0f;
-					}
-
-					UTIL_TraceLine( origin, enemy->EyePosition(), MASK_PLAYERSOLID, me, COLLISION_GROUP_NONE, &result );
-
-					if (result.fraction == 1.0f)
-					{
-						m_crouchAndHold = true;
-					}
-				}
-			}
-		}
-
-		if (m_crouchAndHold)
-		{
-			me->Crouch();
-			me->PrintIfWatched( "Crouch and hold attack!\n" ); 
-		}
+		m_crouchHoldUntil = gpGlobals->curtime + RandomFloat( 4.0f, 8.0f );
 	}
 
 	m_scopeTimestamp = 0;
@@ -208,14 +175,14 @@ void AttackState::Dodge( CCSBot *me )
 			maxRange = 999999.9f;
 		}
 
-		// move towards (or away from) enemy if we are using a knife, behind a corner, or we aren't very skilled
-		if (me->GetProfile()->GetSkill() < 0.66f || !me->IsEnemyVisible())
-		{
-			if (range > maxRange)
-				me->MoveForward();
-			else if (range < minRange)
-				me->MoveBackward();
-		}
+		// Close or open the distance when outside our preferred band. Stock
+		// only did this for low-skill bots (or with the enemy hidden), which
+		// left skilled bots rooted at whatever range the fight happened to
+		// start at; humans step in and out during a duel.
+		if (range > maxRange)
+			me->MoveForward();
+		else if (range < minRange)
+			me->MoveBackward();
 
 		// don't dodge if enemy is facing away
 		const float dodgeRange = 2000.0f;
@@ -322,6 +289,71 @@ void AttackState::Dodge( CCSBot *me )
 		}
 	}
 }
+
+//--------------------------------------------------------------------------------------------------------------
+/**
+ * Decide whether to crouch and hold, or stay mobile.
+ *
+ * Crouching to steady a long-range shot is human; doing it once and becoming a
+ * statue for the rest of the fight is not. This is called at the start of a
+ * fight and re-called while standing, so a bot can crouch, take its shots,
+ * stand back up, move, and crouch again - and m_crouchHoldUntil lets OnUpdate
+ * break a hold that has outlived its usefulness.
+ */
+void AttackState::ConsiderCrouchAndHold( CCSBot *me, CBasePlayer *enemy )
+{
+	if (enemy == NULL)
+		return;
+
+	// can't crouch and hold with a knife; don't sit still if we see a sniper
+	if (me->IsUsingKnife() || (me->CanSeeSniper() && !me->IsSniper()))
+	{
+		if (m_crouchAndHold)
+		{
+			m_crouchAndHold = false;
+			me->StandUp();
+		}
+		return;
+	}
+
+	if (m_crouchAndHold)
+		return;		// already holding
+
+	const float crouchFarRange = 750.0f;
+	float crouchChance;
+
+	// more likely to crouch if using sniper rifle or if enemy is far away
+	if (me->IsUsingSniperRifle())
+		crouchChance = 50.0f;
+	else if ((GetCentroid( me ) - GetCentroid( enemy )).IsLengthGreaterThan( crouchFarRange ))
+		crouchChance = 50.0f;
+	else
+		crouchChance = 20.0f * (1.0f - me->GetProfile()->GetAggression());
+
+	if (RandomFloat( 0.0f, 100.0f ) >= crouchChance)
+		return;
+
+	// make sure we can still see if we crouch
+	trace_t result;
+
+	Vector origin = GetCentroid( me );
+	if (!me->IsCrouching())
+	{
+		// we are standing, adjust for lower crouch origin
+		origin.z -= 20.0f;
+	}
+
+	UTIL_TraceLine( origin, enemy->EyePosition(), MASK_PLAYERSOLID, me, COLLISION_GROUP_NONE, &result );
+
+	if (result.fraction == 1.0f)
+	{
+		m_crouchAndHold = true;
+		m_crouchHoldUntil = gpGlobals->curtime + RandomFloat( 1.5f, 4.0f );
+		me->Crouch();
+		me->PrintIfWatched( "Crouch and hold attack!\n" );
+	}
+}
+
 
 //--------------------------------------------------------------------------------------------------------------
 /**
@@ -499,6 +531,37 @@ void AttackState::OnUpdate( CCSBot *me )
 
 
 	//
+	// Posture: crouch-and-hold is a beat, not a life sentence.
+	// Stand back up when the hold expires, when the enemy pushes into us, or
+	// when we take a hit - then fight mobile (and crouch again later).
+	//
+	if (m_crouchAndHold && !me->IsUsingSniperRifle())
+	{
+		const float enemyRange = (enemyOrigin - myOrigin).Length();
+		const bool expired = (gpGlobals->curtime > m_crouchHoldUntil);
+		const bool pushed = (enemyRange < 350.0f);
+		const bool justHurt = (me->GetTimeSinceAttacked() < 0.5f);
+
+		if (expired || pushed || justHurt)
+		{
+			m_crouchAndHold = false;
+			me->StandUp();
+			m_crouchRecheckTimestamp = gpGlobals->curtime + RandomFloat( 2.0f, 5.0f );
+		}
+	}
+
+	// while standing, occasionally re-consider crouching so a long fight
+	// doesn't collapse into one frozen posture
+	if (!m_crouchAndHold && !me->IsUsingSniperRifle() && gpGlobals->curtime >= m_crouchRecheckTimestamp)
+	{
+		ConsiderCrouchAndHold( me, enemy );
+
+		if (!m_crouchAndHold)
+			m_crouchRecheckTimestamp = gpGlobals->curtime + RandomFloat( 2.0f, 4.0f );
+	}
+
+
+	//
 	// Retreat check
 	// Do not retreat if the enemy is too close
 	//
@@ -550,6 +613,34 @@ void AttackState::OnUpdate( CCSBot *me )
 				{
 					me->PrintIfWatched( "I want to retreat, but no safe spots nearby!\n" );
 				}
+			}
+		}
+	}
+
+	//
+	// Break a stalled duel
+	//
+	// Trading shots from the same spot until one of us falls over is what makes
+	// a fight feel mechanical; a human changes angle. If we wanted to dodge
+	// this fight and it has dragged on while the enemy holds their aim on us,
+	// move to a nearby spot and re-engage from there.
+	//
+	if (me->IsEnemyVisible() && m_shouldDodge && gpGlobals->curtime >= m_nextRepositionTime)
+	{
+		m_nextRepositionTime = gpGlobals->curtime + RandomFloat( 4.0f, 8.0f );
+
+		const float stallTime = gpGlobals->curtime - m_fightStartTimestamp;
+
+		if (stallTime > 3.0f && m_retreatTimer.IsElapsed() &&
+			me->IsPlayerLookingAtMe( enemy, 0.9f ) &&
+			RandomFloat( 0.0f, 100.0f ) < 35.0f)
+		{
+			m_retreatTimer.Start( RandomFloat( 4.0f, 9.0f ) );
+
+			if (me->TryToRetreat( 400.0f, RandomFloat( 1.5f, 3.5f ) ))
+			{
+				me->PrintIfWatched( "Breaking a stalled duel - repositioning!\n" );
+				return;
 			}
 		}
 	}

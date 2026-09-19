@@ -137,12 +137,18 @@ protected:
 	float m_strafeCommitUntil;									///< human strafing: earliest time we'll reverse direction again
 	float m_lastEnemyViewDot;									///< human strafing: dot(enemyForward, toMe) sampled last frame (-2 = uninitialized, resync without triggering)
 
+	float m_crouchHoldUntil;									///< crouch-and-hold is a beat: stand back up after this
+	float m_crouchRecheckTimestamp;								///< earliest time we'll consider crouching again
+	float m_fightStartTimestamp;								///< when this attack began (long duels get broken up)
+	float m_nextRepositionTime;									///< earliest time we'll break a stalled duel to reposition
+
 	bool m_isCoward;											///< if true, we'll retreat if outnumbered during this fight
 	CountdownTimer m_retreatTimer;
 
 	void StopAttacking( CCSBot *bot );
 	void Dodge( CCSBot *bot );									///< do dodge behavior
 	void UpdateHumanStrafe( CCSBot *bot, CBasePlayer *enemy );	///< reactive, human-like strafe decisions
+	void ConsiderCrouchAndHold( CCSBot *bot, CBasePlayer *enemy );	///< decide (or re-decide) whether to crouch and hold
 };
 
 
