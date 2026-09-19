@@ -26,6 +26,20 @@
 float g_BotUpkeepInterval = 0.0f;
 float g_BotUpdateInterval = 0.0f;
 
+// CS2-style smoke (see docs/smoke-cs2-audit.md): the drawn cloud is now a ball
+// ~260 u across, so bots must treat smoke as opaque out to a matching radius or
+// they shoot through the visible cloud. 172 = SMOKE_VISUAL_HALF_WIDTH (130)
+// + SMOKEPARTICLE_SIZE (42), i.e. the puff centres plus one card of fringe.
+// Live cvar so it can be tuned alongside the visuals.
+ConVar bot_smoke_radius( "bot_smoke_radius", "172", FCVAR_GAMEDLL,
+	"Radius bots treat a smoke cloud as opaque (matches the drawn cloud).",
+	true, 80.0f, true, 400.0f );
+
+float CBotManager::GetSmokeGrenadeRadius( void ) const
+{
+	return bot_smoke_radius.GetFloat();
+}
+
 
 //--------------------------------------------------------------------------------------------------------------
 CBotManager::CBotManager()
@@ -366,7 +380,7 @@ bool CBotManager::IsLineBlockedBySmoke( const Vector &from, const Vector &to, fl
 	}
 
 	// define how much smoke a bot can see thru
-	const float maxSmokedLength = 0.7f * SmokeGrenadeRadius;
+	const float maxSmokedLength = 0.7f * GetSmokeGrenadeRadius();
 
 	// return true if the total length of smoke-covered line-of-sight is too much
 	return (totalSmokedLength > maxSmokedLength);

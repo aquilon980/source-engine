@@ -19,9 +19,12 @@ const int g_BotUpdateSkipCount = 2;					///< number of upkeep periods to skip up
 class CNavArea;
 
 /// TODO: move CS-specific defines into CSBot files
+// SmokeGrenadeRadius is the fallback radius used before a smoke detonates;
+// at detonation the projectile sets the live bot_smoke_radius on the manager
+// (see GetSmokeGrenadeRadius). Kept in sync with the drawn cloud (docs/smoke-cs2-audit.md).
 enum
 {
-	SmokeGrenadeRadius = 155,
+	SmokeGrenadeRadius = 172,
 	FlashbangGrenadeRadius = 115,
 	HEGrenadeRadius = 115,
 };
@@ -99,6 +102,7 @@ public:
 	void DestroyAllGrenades( void );
 	bool IsLineBlockedBySmoke( const Vector &from, const Vector &to, float grenadeBloat = 1.0f );	///< return true if line intersects smoke volume, with grenade radius increased by the grenadeBloat factor
 	bool IsInsideSmokeCloud( const Vector *pos );				///< return true if position is inside a smoke cloud
+	float GetSmokeGrenadeRadius( void ) const;					///< live bot smoke radius (bot_smoke_radius), matched to the drawn cloud
 
 	//
 	// Invoke functor on all active grenades.

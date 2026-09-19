@@ -76,7 +76,7 @@ void CSmokeGrenadeProjectile::Think_Detonate()
 		return;
 	}
 
-	TheBots->SetGrenadeRadius( this, SmokeGrenadeRadius );
+	TheBots->SetGrenadeRadius( this, TheBots->GetSmokeGrenadeRadius() );
 
 	// Ok, we've stopped rolling or whatever. Now detonate.
 	ParticleSmokeGrenade *pGren = (ParticleSmokeGrenade*)CBaseEntity::Create( PARTICLESMOKEGRENADE_ENTITYNAME, GetAbsOrigin(), QAngle(0,0,0), NULL );
