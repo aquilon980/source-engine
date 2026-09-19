@@ -39,6 +39,8 @@ void AttackState::OnEnter( CCSBot *me )
 	m_haveSeenEnemy = me->IsEnemyVisible();
 	m_nextDodgeStateTimestamp = 0.0f;
 	m_firstDodge = true;
+	m_strafeCommitUntil = 0.0f;
+	m_lastEnemyViewDot = 0.0f;
 	m_isEnemyHidden = false;
 	m_reacquireTimestamp = 0.0f;
 
@@ -150,6 +152,20 @@ void AttackState::StopAttacking( CCSBot *me )
 
 //--------------------------------------------------------------------------------------------------------------
 /**
+ * Return true if strafing along the given lateral direction would run us into
+ * a wall or another player.  Humans don't juke straight into cover.
+ */
+static bool IsStrafeBlocked( CCSBot *me, const Vector &side )
+{
+	trace_t tr;
+	Vector start = me->WorldSpaceCenter();
+	UTIL_TraceLine( start, start + side * 40.0f, MASK_PLAYERSOLID, me, COLLISION_GROUP_NONE, &tr );
+
+	return (tr.fraction < 1.0f);
+}
+
+//--------------------------------------------------------------------------------------------------------------
+/**
  * Do dodge behavior
  */
 void AttackState::Dodge( CCSBot *me )
@@ -158,7 +174,17 @@ void AttackState::Dodge( CCSBot *me )
 	// Dodge.
 	// If sniping or crouching, stand still.
 	//
-	if (m_shouldDodge && !me->IsUsingSniperRifle() && !m_crouchAndHold)
+	if (me->IsUsingSniperRifle() || m_crouchAndHold)
+	{
+		m_dodgeState = STEADY_ON;
+		return;
+	}
+
+	// Stock behaviour: a bot only dodges if it decided to at the start of the
+	// fight.  Human strafing decides every frame instead (see UpdateHumanStrafe).
+	if (!cv_bot_human_strafe.GetBool() && !m_shouldDodge)
+		return;
+
 	{
 		CBasePlayer *enemy = me->GetBotEnemy();
 		if (enemy == NULL)
@@ -195,6 +221,12 @@ void AttackState::Dodge( CCSBot *me )
 		{
 			m_dodgeState = STEADY_ON;
 			m_nextDodgeStateTimestamp = 0.0f;
+		}
+		else if (cv_bot_human_strafe.GetBool())
+		{
+			// Reactive, human-like strafing - decides whether to hold still
+			// and shoot or to juke, and reverses when the enemy reads us.
+			UpdateHumanStrafe( me, enemy );
 		}
 		else if (gpGlobals->curtime >= m_nextDodgeStateTimestamp)
 		{
@@ -249,12 +281,12 @@ void AttackState::Dodge( CCSBot *me )
 
 			case SLIDE_LEFT:
 			{
-				// don't move left if we will fall
+				// don't move left if we will fall or run into a wall
 				Vector pos = me->GetAbsOrigin() - (lookAheadRange * right);
 
 				if (me->GetSimpleGroundHeightWithFloor( pos, &ground ))
 				{
-					if (me->GetAbsOrigin().z - ground < StepHeight)
+					if (me->GetAbsOrigin().z - ground < StepHeight && !IsStrafeBlocked( me, -right ))
 					{
 						me->StrafeLeft();
 					}
@@ -264,12 +296,12 @@ void AttackState::Dodge( CCSBot *me )
 
 			case SLIDE_RIGHT:
 			{
-				// don't move left if we will fall
+				// don't move right if we will fall or run into a wall
 				Vector pos = me->GetAbsOrigin() + (lookAheadRange * right);
 
 				if (me->GetSimpleGroundHeightWithFloor( pos, &ground ))
 				{
-					if (me->GetAbsOrigin().z - ground < StepHeight)
+					if (me->GetAbsOrigin().z - ground < StepHeight && !IsStrafeBlocked( me, right ))
 					{
 						me->StrafeRight();
 					}
@@ -287,6 +319,112 @@ void AttackState::Dodge( CCSBot *me )
 			}
 		}
 	}
+}
+
+//--------------------------------------------------------------------------------------------------------------
+/**
+ * Human-like strafe decision making.
+ *
+ * Stock bots pick a random direction on a timer and hold it for 0.3-1.0s no
+ * matter what the enemy is doing.  Real players instead:
+ *   - hold still (counter-strafe) when they have a free shot,
+ *   - juke while being aimed at,
+ *   - reverse the moment the enemy tracks onto them,
+ *   - flinch when they take a hit.
+ * Everything here keys off skill so experts read the enemy cleanly while poor
+ * bots make sloppier, slower decisions.
+ */
+void AttackState::UpdateHumanStrafe( CCSBot *me, CBasePlayer *enemy )
+{
+	const float skill = me->GetProfile()->GetSkill();
+	const bool enemyVisible = me->IsEnemyVisible();
+
+	// Is the enemy actually pointing at us right now?  (tight tolerance)
+	const bool underAim = enemyVisible && me->IsPlayerLookingAtMe( enemy, 0.95f );
+
+	// Are they reloading, i.e. unable to punish a stationary target?
+	const bool enemyReloading = me->IsRecognizedEnemyReloading();
+
+	// Did we just take a hit?  (a fresh hit makes a human flinch to a new side)
+	const bool justHurt = (me->GetTimeSinceAttacked() < 0.5f);
+
+	// How well is the enemy's view centred on us this frame?  Compare to last
+	// frame to tell whether they are *improving* their aim on us, which is the
+	// cue a human uses to switch strafe direction.
+	bool beingRead = false;
+	if (enemyVisible)
+	{
+		Vector enemyForward;
+		AngleVectors( enemy->EyeAngles() + enemy->GetPunchAngle(), &enemyForward );
+
+		Vector toMe = me->GetAbsOrigin() - enemy->GetAbsOrigin();
+		toMe.NormalizeInPlace();
+
+		float enemyViewDot = DotProduct( enemyForward, toMe );
+		beingRead = (enemyViewDot - m_lastEnemyViewDot) > 0.02f;
+		m_lastEnemyViewDot = enemyViewDot;
+	}
+	else
+	{
+		m_lastEnemyViewDot = 0.0f;
+	}
+
+	// Hold still when we have a free shot: the enemy is reloading, or a
+	// confident (high skill) bot is not even being aimed at.
+	bool wantHold = false;
+	if (enemyVisible && !justHurt)
+	{
+		// Punish a reload, or - for a confident player who hasn't been shot at
+		// for a moment and isn't currently being aimed at - plant and fire.
+		if (enemyReloading)
+			wantHold = true;
+		else if (skill > 0.6f && !underAim && me->GetTimeSinceAttacked() > 1.5f)
+			wantHold = true;
+	}
+
+	// Human "commitment": stay in a direction for a short interval so we don't
+	// twitch.  Experts make crisper, shorter moves than poor bots.
+	const float commitTime = 0.20f + 0.45f * (1.0f - skill);
+
+	// A fresh hit or a tracked aim pulls our next decision forward, but never
+	// before the minimum commit expires.
+	if ((justHurt || beingRead) && gpGlobals->curtime >= m_strafeCommitUntil)
+		m_nextDodgeStateTimestamp = gpGlobals->curtime;
+
+	if (wantHold)
+	{
+		if (m_dodgeState != STEADY_ON)
+			me->PrintIfWatched( "Counter-strafing to fire\n" );
+
+		m_dodgeState = STEADY_ON;
+		m_nextDodgeStateTimestamp = gpGlobals->curtime + 0.15f;
+		m_firstDodge = false;
+		return;
+	}
+
+	if (gpGlobals->curtime < m_nextDodgeStateTimestamp)
+		return;
+
+	// Pick the next direction.  A human alternates sides; only an opening move
+	// is a free choice.
+	int next;
+	if (m_firstDodge)
+		next = (RandomInt( 0, 100 ) < 50 ) ? SLIDE_LEFT : SLIDE_RIGHT;
+	else if (m_dodgeState == SLIDE_LEFT)
+		next = SLIDE_RIGHT;
+	else if (m_dodgeState == SLIDE_RIGHT)
+		next = SLIDE_LEFT;
+	else
+		next = (RandomInt( 0, 100 ) < 50 ) ? SLIDE_LEFT : SLIDE_RIGHT;
+
+	// Poor bots still occasionally panic-jump, as in stock behaviour.
+	if (skill < 0.5f && RandomFloat( 0.0f, 100.0f ) < 12.0f && !me->IsNotMoving())
+		next = JUMP;
+
+	m_dodgeState = (DodgeStateType)next;
+	m_strafeCommitUntil = gpGlobals->curtime + commitTime;
+	m_nextDodgeStateTimestamp = m_strafeCommitUntil + RandomFloat( 0.0f, 0.35f * (1.0f - skill) );
+	m_firstDodge = false;
 }
 
 

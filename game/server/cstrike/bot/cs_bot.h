@@ -134,11 +134,15 @@ protected:
 	bool m_shouldDodge;
 	bool m_firstDodge;
 
+	float m_strafeCommitUntil;									///< human strafing: earliest time we'll reverse direction again
+	float m_lastEnemyViewDot;									///< human strafing: dot(enemyForward, toMe) sampled last frame
+
 	bool m_isCoward;											///< if true, we'll retreat if outnumbered during this fight
 	CountdownTimer m_retreatTimer;
 
 	void StopAttacking( CCSBot *bot );
 	void Dodge( CCSBot *bot );									///< do dodge behavior
+	void UpdateHumanStrafe( CCSBot *bot, CBasePlayer *enemy );	///< reactive, human-like strafe decisions
 };
 
 
