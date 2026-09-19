@@ -1636,7 +1636,10 @@ void CCSBotManager::OnServerShutdown( IGameEvent *event )
 			"bot_allow_machine_guns",
 			"bot_allow_rifles",
 			"bot_allow_snipers",
-			"bot_allow_grenades"
+			"bot_allow_grenades",
+			"bot_human_strafe",
+			"bot_damage_to_player",
+			"bot_smoke_radius"
 		};
 		
 		KeyValues *data = new KeyValues( "ServerConfig" );

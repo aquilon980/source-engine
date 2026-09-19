@@ -128,7 +128,7 @@ ConVar bot_mimic_yaw_offset( "bot_mimic_yaw_offset", "180", FCVAR_CHEAT );
 
 ConVar sv_legacy_grenade_damage( "sv_legacy_grenade_damage", "0", FCVAR_REPLICATED, "Enable to replicate grenade damage behavior of the original Counter-Strike Source game." );
 
-ConVar bot_damage_to_player( "bot_damage_to_player", "0.5", 0, "Scale on damage bots deal to human players (1 = stock, 0 = harmless). Bot-vs-bot damage is unchanged." );
+ConVar bot_damage_to_player( "bot_damage_to_player", "0.5", FCVAR_REPLICATED, "Scale on damage bots deal to human players (1 = stock, 0 = harmless). Bot-vs-bot damage is unchanged.", true, 0.0f, true, 2.0f );
 
 extern ConVar mp_autokick;
 extern ConVar mp_holiday_nogifts;

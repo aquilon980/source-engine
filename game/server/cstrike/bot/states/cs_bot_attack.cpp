@@ -40,7 +40,7 @@ void AttackState::OnEnter( CCSBot *me )
 	m_nextDodgeStateTimestamp = 0.0f;
 	m_firstDodge = true;
 	m_strafeCommitUntil = 0.0f;
-	m_lastEnemyViewDot = 0.0f;
+	m_lastEnemyViewDot = -2.0f;
 	m_isEnemyHidden = false;
 	m_reacquireTimestamp = 0.0f;
 
@@ -153,13 +153,15 @@ void AttackState::StopAttacking( CCSBot *me )
 //--------------------------------------------------------------------------------------------------------------
 /**
  * Return true if strafing along the given lateral direction would run us into
- * a wall or another player.  Humans don't juke straight into cover.
+ * world geometry.  Humans don't juke straight into cover.  Only the world is
+ * tested (MASK_SOLID, one step of lookahead) - teammates are ignored, since
+ * friend-avoidance handles them and a nearby teammate should not freeze us.
  */
 static bool IsStrafeBlocked( CCSBot *me, const Vector &side )
 {
 	trace_t tr;
 	Vector start = me->WorldSpaceCenter();
-	UTIL_TraceLine( start, start + side * 40.0f, MASK_PLAYERSOLID, me, COLLISION_GROUP_NONE, &tr );
+	UTIL_TraceLine( start, start + side * 28.0f, MASK_SOLID, me, COLLISION_GROUP_NONE, &tr );
 
 	return (tr.fraction < 1.0f);
 }
@@ -332,27 +334,54 @@ void AttackState::Dodge( CCSBot *me )
  *   - reverse the moment the enemy tracks onto them,
  *   - flinch when they take a hit.
  * Everything here keys off skill so experts read the enemy cleanly while poor
- * bots make sloppier, slower decisions.
+ * bots make sloppier, slower decisions.  Bots that failed the opening dodge
+ * roll (m_shouldDodge, 80 * skill) plant their feet like stock and only flinch
+ * when hit - that roll is what keeps easy bots easy.
  */
 void AttackState::UpdateHumanStrafe( CCSBot *me, CBasePlayer *enemy )
 {
 	const float skill = me->GetProfile()->GetSkill();
 	const bool enemyVisible = me->IsEnemyVisible();
 
-	// Is the enemy actually pointing at us right now?  (tight tolerance)
-	const bool underAim = enemyVisible && me->IsPlayerLookingAtMe( enemy, 0.95f );
+	// Nobody to juke: hold still laterally and let the range logic above
+	// close/open the distance.  Resync the view-dot tracker so re-acquiring
+	// the enemy doesn't false-trigger a "being read" reverse.
+	if (!enemyVisible)
+	{
+		m_dodgeState = STEADY_ON;
+		m_lastEnemyViewDot = -2.0f;
+		return;
+	}
 
-	// Are they reloading, i.e. unable to punish a stationary target?
-	const bool enemyReloading = me->IsRecognizedEnemyReloading();
+	// Knifing across open ground: run straight at the victim, don't strafe.
+	// (Toe to toe the OnUpdate knife path takes over and returns early.)
+	const float slashRange = 70.0f;
+	if (me->IsUsingKnife() && (enemy->GetAbsOrigin() - me->GetAbsOrigin()).IsLengthGreaterThan( slashRange ))
+	{
+		m_dodgeState = STEADY_ON;
+		m_lastEnemyViewDot = -2.0f;
+		return;
+	}
 
 	// Did we just take a hit?  (a fresh hit makes a human flinch to a new side)
 	const bool justHurt = (me->GetTimeSinceAttacked() < 0.5f);
 
+	// Bots that decided not to dodge at the start of the fight plant their
+	// feet.  A fresh hit still pulls a flinch out of them (handled below).
+	if (!m_shouldDodge && !justHurt)
+	{
+		m_dodgeState = STEADY_ON;
+		m_lastEnemyViewDot = -2.0f;
+		return;
+	}
+
 	// How well is the enemy's view centred on us this frame?  Compare to last
 	// frame to tell whether they are *improving* their aim on us, which is the
-	// cue a human uses to switch strafe direction.
+	// cue a human uses to switch strafe direction.  Only meaningful when the
+	// enemy is already roughly facing us - ignore deltas while they look away.
+	// m_lastEnemyViewDot starts at -2 (uninitialized): the first sample after
+	// acquiring the enemy only stores, never triggers.
 	bool beingRead = false;
-	if (enemyVisible)
 	{
 		Vector enemyForward;
 		AngleVectors( enemy->EyeAngles() + enemy->GetPunchAngle(), &enemyForward );
@@ -361,18 +390,21 @@ void AttackState::UpdateHumanStrafe( CCSBot *me, CBasePlayer *enemy )
 		toMe.NormalizeInPlace();
 
 		float enemyViewDot = DotProduct( enemyForward, toMe );
-		beingRead = (enemyViewDot - m_lastEnemyViewDot) > 0.02f;
+		if (m_lastEnemyViewDot > -1.5f && enemyViewDot > 0.5f)
+			beingRead = (enemyViewDot - m_lastEnemyViewDot) > 0.015f;
 		m_lastEnemyViewDot = enemyViewDot;
 	}
-	else
-	{
-		m_lastEnemyViewDot = 0.0f;
-	}
+
+	// Is the enemy actually pointing at us right now?  (tight tolerance)
+	const bool underAim = me->IsPlayerLookingAtMe( enemy, 0.95f );
+
+	// Are they reloading, i.e. unable to punish a stationary target?
+	const bool enemyReloading = me->IsRecognizedEnemyReloading();
 
 	// Hold still when we have a free shot: the enemy is reloading, or a
 	// confident (high skill) bot is not even being aimed at.
 	bool wantHold = false;
-	if (enemyVisible && !justHurt)
+	if (!justHurt)
 	{
 		// Punish a reload, or - for a confident player who hasn't been shot at
 		// for a moment and isn't currently being aimed at - plant and fire.
@@ -382,9 +414,9 @@ void AttackState::UpdateHumanStrafe( CCSBot *me, CBasePlayer *enemy )
 			wantHold = true;
 	}
 
-	// Human "commitment": stay in a direction for a short interval so we don't
-	// twitch.  Experts make crisper, shorter moves than poor bots.
-	const float commitTime = 0.20f + 0.45f * (1.0f - skill);
+	// Human "commitment": stay in a direction long enough to actually move.
+	// Experts strafe about twice a second, poor bots lumber side to side.
+	const float commitTime = 0.35f + 0.35f * (1.0f - skill);
 
 	// A fresh hit or a tracked aim pulls our next decision forward, but never
 	// before the minimum commit expires.
@@ -397,7 +429,8 @@ void AttackState::UpdateHumanStrafe( CCSBot *me, CBasePlayer *enemy )
 			me->PrintIfWatched( "Counter-strafing to fire\n" );
 
 		m_dodgeState = STEADY_ON;
-		m_nextDodgeStateTimestamp = gpGlobals->curtime + 0.15f;
+		m_strafeCommitUntil = gpGlobals->curtime + commitTime;
+		m_nextDodgeStateTimestamp = m_strafeCommitUntil;
 		m_firstDodge = false;
 		return;
 	}
@@ -417,13 +450,13 @@ void AttackState::UpdateHumanStrafe( CCSBot *me, CBasePlayer *enemy )
 	else
 		next = (RandomInt( 0, 100 ) < 50 ) ? SLIDE_LEFT : SLIDE_RIGHT;
 
-	// Poor bots still occasionally panic-jump, as in stock behaviour.
-	if (skill < 0.5f && RandomFloat( 0.0f, 100.0f ) < 12.0f && !me->IsNotMoving())
+	// Poor bots panic-jump when flinching, not on every direction change.
+	if (justHurt && skill < 0.5f && RandomFloat( 0.0f, 100.0f ) < 15.0f && !me->IsNotMoving())
 		next = JUMP;
 
 	m_dodgeState = (DodgeStateType)next;
 	m_strafeCommitUntil = gpGlobals->curtime + commitTime;
-	m_nextDodgeStateTimestamp = m_strafeCommitUntil + RandomFloat( 0.0f, 0.35f * (1.0f - skill) );
+	m_nextDodgeStateTimestamp = m_strafeCommitUntil + RandomFloat( 0.05f, 0.05f + 0.25f * (1.0f - skill) );
 	m_firstDodge = false;
 }
 

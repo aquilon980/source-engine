@@ -62,6 +62,9 @@ void CCSBot::FireWeaponAtEnemy( void )
 				// check our accuracy versus our target distance
 				float fProjectedSpread = rangeToEnemy * GetActiveCSWeapon()->GetInaccuracy();
 				float fRequiredSpread = IsUsing( WEAPON_AWP ) ? 50.0f : 25.0f;	// AWP will kill with any hit
+				// weapon_spread_scale shrinks everyone's inaccuracy (see docs/casual-defaults.md);
+				// scale the gate with it so bot sniper patience stays at stock timing.
+				fRequiredSpread *= weapon_spread_scale.GetFloat();
 				if ( fProjectedSpread > fRequiredSpread )
 					return;
 			}
@@ -1112,7 +1115,7 @@ public:
 void CCSBot::AvoidEnemyGrenades( void )
 {
 	// low skill bots dont avoid grenades
-	if (GetProfile()->GetSkill() < 0.5)
+	if (GetProfile()->GetSkill() < 0.6f)
 	{
 		return;
 	}
@@ -1120,12 +1123,6 @@ void CCSBot::AvoidEnemyGrenades( void )
 	if (IsAvoidingGrenade())
 	{
 		// already avoiding one
-		return;
-	}
-
-	// low skill bots don't avoid grenades
-	if (GetProfile()->GetSkill() < 0.6f)
-	{
 		return;
 	}
 
