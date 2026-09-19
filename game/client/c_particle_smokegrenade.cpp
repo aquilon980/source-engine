@@ -85,6 +85,22 @@ static ConVar smoke_core( "smoke_core", "0.42", FCVAR_ARCHIVE, "Fraction of the 
 static ConVar smoke_shell( "smoke_shell", "1.35", FCVAR_ARCHIVE, "Where the cloud feathers to zero, as a fraction of its half-width.", true, 0.7f, true, 1.5f );
 static ConVar smoke_brightness( "smoke_brightness", "1.0", FCVAR_ARCHIVE, "Smoke puff brightness multiplier.", true, 0.4f, true, 1.6f );
 static ConVar smoke_scale( "smoke_scale", "1.0", FCVAR_ARCHIVE, "Smoke cloud size multiplier at detonation (0.6-1.4).", true, 0.6f, true, 1.4f );
+// Shell opacity: the outer cards stop being see-through, so you read the
+// outside of the cloud instead of the individual cards layered inside it.
+// The core is already opaque; this lifts the feathered shell. 1.0 = stock
+// falloff, higher seals the surface (see docs/smoke-volumetric.md).
+static ConVar smoke_opacity( "smoke_opacity", "1.3", FCVAR_ARCHIVE, "Smoke shell opacity multiplier (higher hides the inside of the cloud).", true, 0.5f, true, 2.0f );
+// The particle engine sorts each *material* separately, so splitting the cloud
+// across the 16 sprites makes it draw as 16 unsorted passes — a far puff from a
+// later sprite overdraws a near one from an earlier sprite, which is what made
+// the smoke look like you could see into it. One sprite keeps every puff in a
+// single sorted draw group, so the front cards occlude the back ones. Raise it
+// for texture variety and accept the interleaving (see docs/smoke-volumetric.md).
+static ConVar smoke_sprite_count( "smoke_sprite_count", "1", FCVAR_ARCHIVE, "Smoke sprites to draw from (1 = one sorted group, correct occlusion; higher = more texture variety but the groups interleave).", true, 1.0f, true, 16.0f );
+// CS2 density shading: where the cloud is thickest (its middle and its lower
+// half) the smoke reads darker, with the lit rim/top left bright. 0 = flat
+// bright grade. See docs/smoke-volumetric.md.
+static ConVar smoke_density_shade( "smoke_density_shade", "1.0", FCVAR_ARCHIVE, "How much denser smoke darkens (CS2 dark middle/bottom). 0 = flat.", true, 0.0f, true, 1.0f );
 static ConVar smoke_debug( "smoke_debug", "0", FCVAR_NONE, "Print smoke carve diagnostics to the console." );
 
 // Same pattern as c_func_smokevolume/c_smokestack: low-end lever that halves
@@ -1052,6 +1068,14 @@ void C_ParticleSmokeGrenade::RenderParticles( CParticleRenderIterator *pIterator
 	// core, a wispy shell and a defined silhouette, which is the CS2 ball.
 	float flCloudRadius = MAX( 1.0f, m_SpacingRadius * clamp( smoke_shell.GetFloat(), 0.7f, 1.5f ) );
 	float flHePush = smoke_he_push.GetFloat();
+	float flOpacity = smoke_opacity.GetFloat();
+	float flShadeAmount = clamp( smoke_density_shade.GetFloat(), 0.0f, 1.0f );
+	float flHalfHeight = MAX( 1.0f, m_SpacingRadius * MAX( 0.3f, m_flHeightScale ) );
+
+	// Cloud centre in view space — the axis the density shading darkens around
+	// (the middle of the ball on screen is where the smoke is thickest).
+	Vector vCenterView;
+	TransformParticle( ParticleMgr()->GetModelView(), m_SmokeBasePos, vCenterView );
 
 	// One view-space transform per hole per frame, instead of per hole per puff.
 	BuildHoleViewCache();
@@ -1141,6 +1165,12 @@ void C_ParticleSmokeGrenade::RenderParticles( CParticleRenderIterator *pIterator
 			// Per-puff density variation so the outer shell isn't uniform.
 			alpha *= pParticle->m_flDensity;
 
+			// Shell opacity: lift the feathered outer cards so the surface
+			// seals. With the core already at 1 this makes the outside read
+			// opaque — you see the cloud, not the cards layered inside it.
+			alpha *= flOpacity;
+			alpha = clamp( alpha, 0.0f, 1.0f );
+
 			// Puff size drives the carve test too: a card's drawn extent
 			// covers the hole even when its centre is outside it, so the
 			// suppressor gets the rendered half-size (bloom + fade included).
@@ -1215,6 +1245,33 @@ void C_ParticleSmokeGrenade::RenderParticles( CParticleRenderIterator *pIterator
 			// flattens the shading the floor above just let through.
 			float flLum = color.x * 0.3f + color.y * 0.59f + color.z * 0.11f;
 			color += (Vector( flLum, flLum, flLum ) - color) * 0.6f;
+
+			// CS2 density shading: the cloud is thickest through its middle
+			// and along its lower half, and thicker smoke reads darker. The
+			// darkening is driven by where a puff sits, not by the map light,
+			// so the ball keeps a lit top/rim and a dark, dense core and base
+			// instead of grading flat. Each term is 0 (dark) .. 1 (lit):
+			//   radial — distance from the cloud's screen axis (middle = 0)
+			//   height — up the dome (floor = 0, top = 1)
+			//   depth  — front of the ball toward the eye (far = 0, near = 1)
+			if ( flShadeAmount > 0.0f )
+			{
+				float flDX = tRenderPos.x - vCenterView.x;
+				float flDY = tRenderPos.y - vCenterView.y;
+				float flRadial = clamp( sqrtf( flDX * flDX + flDY * flDY ) / flCloudRadius, 0.0f, 1.0f );
+				flRadial = flRadial * flRadial * ( 3.0f - 2.0f * flRadial );
+
+				float flHeight = clamp( ( pParticle->m_Pos.z + flHalfHeight ) / ( 2.0f * flHalfHeight ), 0.0f, 1.0f );
+				flHeight = flHeight * flHeight * ( 3.0f - 2.0f * flHeight );
+
+				float flDepth = clamp( ( tRenderPos.z - ( vCenterView.z - m_SpacingRadius ) ) / ( 2.0f * m_SpacingRadius ), 0.0f, 1.0f );
+
+				float flShade = ( 0.60f + 0.40f * flRadial )
+				              * ( 0.55f + 0.45f * flHeight )
+				              * ( 0.78f + 0.22f * flDepth );
+				color *= Lerp( flShadeAmount, 1.0f, flShade );
+			}
+
 			color.x = clamp( color.x, 0.0f, 1.0f );
 			color.y = clamp( color.y, 0.0f, 1.0f );
 			color.z = clamp( color.z, 0.0f, 1.0f );
@@ -1328,6 +1385,11 @@ void C_ParticleSmokeGrenade::FillVolume()
 	// from SMOKEGRENADE_PARTICLERADIUS, which stays 80 because it fixes the
 	// gameplay ID-block and flash checks.
 	float flScale = smoke_scale.GetFloat();
+
+	// One sorted draw group by default (see smoke_sprite_count). With a single
+	// sprite, pick it once per cloud so different clouds aren't carbon copies.
+	int nSprites = clamp( (int)smoke_sprite_count.GetFloat(), 1, NUM_MATERIAL_HANDLES );
+	int iSpritePick = rand() % NUM_MATERIAL_HANDLES;
 
 	m_SpacingRadius = SMOKE_VISUAL_HALF_WIDTH * flScale;
 	m_xCount = m_yCount = m_zCount = NUM_PARTICLES_PER_DIMENSION;
@@ -1506,15 +1568,19 @@ void C_ParticleSmokeGrenade::FillVolume()
 					}
 
 					{
+						int iMat = ( nSprites == 1 ) ? iSpritePick : ( rand() % nSprites );
 						SmokeGrenadeParticle *pParticle = 
-							(SmokeGrenadeParticle*)m_ParticleEffect.AddParticle(sizeof(SmokeGrenadeParticle), m_MaterialHandles[rand() % NUM_MATERIAL_HANDLES]);
+							(SmokeGrenadeParticle*)m_ParticleEffect.AddParticle(sizeof(SmokeGrenadeParticle), m_MaterialHandles[iMat]);
 
 						if(pParticle)
 						{
 							pParticle->m_Pos = vMolded - m_SmokeBasePos; // store its position in local space
 							pParticle->m_ColorInterp = (unsigned char)( rand() % 256 );
 							pParticle->m_RotationSpeed = FRand(-ROTATION_SPEED, ROTATION_SPEED); // Rotation speed.
-							pParticle->m_CurRotation = FRand(-6, 6);
+							// Full random start angle: with one sprite in play
+							// (smoke_sprite_count 1) a ±6° spread made the
+							// cloud look tiled.
+							pParticle->m_CurRotation = FRand( -180.0f, 180.0f );
 							pParticle->m_flSize = SMOKEPARTICLE_SIZE * flScale * FRand( 0.7f, 1.3f );
 							pParticle->m_flDensity = FRand( 0.65f, 1.05f );
 							pParticle->m_flSuppress = 0.0f;
