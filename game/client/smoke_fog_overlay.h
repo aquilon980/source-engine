@@ -45,6 +45,10 @@ void DrawSmokeFogOverlay();
 // Set these before calling DrawSmokeFogOverlay.
 extern float	g_SmokeFogOverlayAlpha;
 extern Vector	g_SmokeFogOverlayColor;
+// Per-channel tint multiplier accumulated by the smoke puffs (team colour,
+// CS2-style). Reset to (1,1,1) at the top of each render frame beside
+// g_SmokeFogOverlayAlpha. See docs/smoke-team-color.md.
+extern Vector	g_SmokeFogOverlayTint;
 
 
 #endif

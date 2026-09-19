@@ -82,6 +82,13 @@ void CSmokeGrenadeProjectile::Think_Detonate()
 	ParticleSmokeGrenade *pGren = (ParticleSmokeGrenade*)CBaseEntity::Create( PARTICLESMOKEGRENADE_ENTITYNAME, GetAbsOrigin(), QAngle(0,0,0), NULL );
 	if ( pGren )
 	{
+		// CS2-style team tint: stamp the throwing team on the cloud so the
+		// client can colour it (CT blue-grey, T sandy). m_iTeamNum already
+		// rides the base-entity send table, so no new netvar and the client
+		// reads it via C_BaseEntity::GetTeamNumber().
+		if ( GetThrower() )
+			pGren->ChangeTeam( GetThrower()->GetTeamNumber() );
+
 		pGren->FillVolume();
 		pGren->SetFadeTime( 15, 20 );
 		pGren->SetAbsOrigin( GetAbsOrigin() );

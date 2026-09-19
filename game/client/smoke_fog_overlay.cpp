@@ -21,6 +21,7 @@ static IMaterial *g_pSmokeFogMaterial = NULL;
 
 float		g_SmokeFogOverlayAlpha;
 Vector		g_SmokeFogOverlayColor;
+Vector		g_SmokeFogOverlayTint;
 
 CLIENTEFFECT_REGISTER_BEGIN( PrecacheSmokeFogOverlay )
 CLIENTEFFECT_MATERIAL( "particle/screenspace_fog" )
@@ -31,6 +32,7 @@ void InitSmokeFogOverlay()
 	TermSmokeFogOverlay();
 	
 	g_SmokeFogOverlayAlpha = 0;
+	g_SmokeFogOverlayTint.Init( 1, 1, 1 );
 
 	if(materials)
 	{
@@ -61,7 +63,12 @@ void DrawSmokeFogOverlay()
 	// CS2 smoke reads neutral grey from inside, not blue — match the puffs.
 	// (0.62 now that the puffs' grade carries real shading instead of being
 	// pinned flat at ~0.72; the old 0.78 was brighter than the cloud itself.)
+	// The team tint (CT blue / T sandy) is folded in here so the fog matches
+	// the cloud you're standing in; neutral (1,1,1) leaves it grey.
 	g_SmokeFogOverlayColor.Init( 0.62, 0.62, 0.62 );
+	g_SmokeFogOverlayColor.x *= g_SmokeFogOverlayTint.x;
+	g_SmokeFogOverlayColor.y *= g_SmokeFogOverlayTint.y;
+	g_SmokeFogOverlayColor.z *= g_SmokeFogOverlayTint.z;
 	
 	CMatRenderContextPtr pRenderContext( materials );
 

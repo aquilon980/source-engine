@@ -18,6 +18,7 @@
 
 #if CSTRIKE_DLL
 #include "c_cs_player.h"
+#include "cs_shareddefs.h"
 #endif
 
 // memdbgon must be the last include file in a .cpp file!!!
@@ -101,6 +102,12 @@ static ConVar smoke_sprite_count( "smoke_sprite_count", "1", FCVAR_ARCHIVE, "Smo
 // half) the smoke reads darker, with the lit rim/top left bright. 0 = flat
 // bright grade. See docs/smoke-volumetric.md.
 static ConVar smoke_density_shade( "smoke_density_shade", "1.0", FCVAR_ARCHIVE, "How much denser smoke darkens (CS2 dark middle/bottom). 0 = flat.", true, 0.0f, true, 1.0f );
+// CS2 tints smoke by the throwing team and fades the tint back to neutral
+// grey as the cloud dissipates (the greyness is the "about to vanish" tell).
+// Shades are derived from CS2's team colours: CT blue #5E98D9 (94,152,217),
+// T sandy/yellow #DE9B35 (222,155,53). See docs/smoke-team-color.md.
+static ConVar smoke_team_tint( "smoke_team_tint", "0.8", FCVAR_ARCHIVE, "How strongly smoke is tinted by the throwing team (0 = neutral grey, 1 = full).", true, 0.0f, true, 1.0f );
+static ConVar smoke_team_tint_fade( "smoke_team_tint_fade", "1", FCVAR_ARCHIVE, "Fade the team tint back to grey as the smoke dissipates (CS2)." );
 static ConVar smoke_debug( "smoke_debug", "0", FCVAR_NONE, "Print smoke carve diagnostics to the console." );
 
 // Same pattern as c_func_smokevolume/c_smokestack: low-end lever that halves
@@ -415,6 +422,31 @@ static inline Vector ReactiveSmokeClosestPointOnSegment( const Vector &vPoint, c
 	return vStart + vSeg * flT;
 }
 
+#if CSTRIKE_DLL
+// The team tint as a per-channel multiplier. Kept near 1 in every channel so
+// the grey cloud doesn't clip white: these shift hue and brightness together
+// (like real light), which is how CS2's tint reads. Writes (1,1,1) for an
+// unknown/neutral team or zero strength, so callers can always multiply by it.
+// Shades derive from CS2's team colours: CT blue #5E98D9 (94,152,217),
+// T sandy/yellow #DE9B35 (222,155,53) — see docs/smoke-team-color.md.
+static void Smoke_TeamTintMultiplier( int iTeam, float flAmount, Vector &vMult )
+{
+	vMult.Init( 1.0f, 1.0f, 1.0f );
+	if ( flAmount <= 0.0f )
+		return;
+
+	Vector vRaw;
+	if ( iTeam == TEAM_CT )
+		vRaw.Init( 0.78f, 0.90f, 1.18f );		// cool blue-grey
+	else if ( iTeam == TEAM_TERRORIST )
+		vRaw.Init( 1.12f, 1.00f, 0.70f );		// warm sand / dust storm
+	else
+		return;
+
+	vMult = Lerp( flAmount, Vector( 1.0f, 1.0f, 1.0f ), vRaw );
+}
+#endif
+
 static inline void WorldTraceLine( const Vector &start, const Vector &end, int contentsMask, trace_t *trace )
 {
 	#if defined(PARTICLEPROTOTYPE_APP)
@@ -450,6 +482,16 @@ static inline float& EngineGetSmokeFogOverlayAlpha()
 		return dummy;
 	#else
 		return g_SmokeFogOverlayAlpha;
+	#endif
+}
+
+static inline Vector& EngineGetSmokeFogOverlayTint()
+{
+	#if defined(PARTICLEPROTOTYPE_APP)
+		static Vector dummy( 1.0f, 1.0f, 1.0f );
+		return dummy;
+	#else
+		return g_SmokeFogOverlayTint;
 	#endif
 }
 
@@ -635,6 +677,32 @@ void C_ParticleSmokeGrenade::ClientThink()
 		}
 	}
 	flFogAlpha *= 1.0f - flHole;
+
+	// Carry the team tint into the inside-smoke screen fog too, so standing in
+	// a T smoke fogs sandy and a CT smoke fogs blue instead of both greying.
+	// Weighted average across every smoke the eye is inside this frame; the
+	// accumulator is reset (to 1,1,1) at the top of the render frame beside
+	// g_SmokeFogOverlayAlpha.
+#if CSTRIKE_DLL
+	{
+		float flWeight = flFogAlpha * flIn;
+		if ( flWeight > 0.0f )
+		{
+			float flTint = clamp( smoke_team_tint.GetFloat(), 0.0f, 1.0f );
+			if ( smoke_team_tint_fade.GetBool() )
+				flTint *= ( 1.0f - m_flFadeT );
+
+			Vector vTeamTint;
+			Smoke_TeamTintMultiplier( GetTeamNumber(), flTint, vTeamTint );
+
+			Vector &vAccum = EngineGetSmokeFogOverlayTint();
+			float flPrev = EngineGetSmokeFogOverlayAlpha();
+			float flTotal = flPrev + flWeight;
+			if ( flTotal > 0.0001f )
+				vAccum = ( vAccum * flPrev + vTeamTint * flWeight ) / flTotal;
+		}
+	}
+#endif
 
 	EngineGetSmokeFogOverlayAlpha() += flFogAlpha * flIn;
 }
@@ -1077,6 +1145,16 @@ void C_ParticleSmokeGrenade::RenderParticles( CParticleRenderIterator *pIterator
 	Vector vCenterView;
 	TransformParticle( ParticleMgr()->GetModelView(), m_SmokeBasePos, vCenterView );
 
+#if CSTRIKE_DLL
+	// CS2 team tint: CT blue, T sandy, faded back to grey as the cloud
+	// dissipates. One multiplier per cloud per frame.
+	float flTeamTint = clamp( smoke_team_tint.GetFloat(), 0.0f, 1.0f );
+	if ( smoke_team_tint_fade.GetBool() )
+		flTeamTint *= ( 1.0f - m_flFadeT );
+	Vector vTeamTint;
+	Smoke_TeamTintMultiplier( GetTeamNumber(), flTeamTint, vTeamTint );
+#endif
+
 	// One view-space transform per hole per frame, instead of per hole per puff.
 	BuildHoleViewCache();
 
@@ -1271,6 +1349,12 @@ void C_ParticleSmokeGrenade::RenderParticles( CParticleRenderIterator *pIterator
 				              * ( 0.78f + 0.22f * flDepth );
 				color *= Lerp( flShadeAmount, 1.0f, flShade );
 			}
+
+#if CSTRIKE_DLL
+			// Team tint (CT blue / T sandy), applied last so it colours the
+			// final shaded cloud, and neutral by default for map smoke.
+			color *= vTeamTint;
+#endif
 
 			color.x = clamp( color.x, 0.0f, 1.0f );
 			color.y = clamp( color.y, 0.0f, 1.0f );

@@ -2161,6 +2161,8 @@ void OnRenderStart()
 
 	// Reset the overlay alpha. Entities can change the state of this in their think functions.
 	g_SmokeFogOverlayAlpha = 0;	
+	// Smoke also accumulates its team tint here (CT blue / T sandy).
+	g_SmokeFogOverlayTint.Init( 1, 1, 1 );
 
 	// This must occur prior to SimulatEntities,
 	// which is where the client thinks for c_colorcorrection + c_colorcorrectionvolumes
