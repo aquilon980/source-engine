@@ -251,6 +251,10 @@ public:
 	virtual void OnUpdate( CCSBot *bot );
 	virtual void OnExit( CCSBot *bot );
 	virtual const char *GetName( void ) const	{ return "DefuseBomb"; }
+
+private:
+	float m_reachTimestamp;										///< when we started closing the last stretch (-1 = not yet)
+	float m_startTimestamp;										///< when +use should have taken by now (-1 = not in range yet)
 };
 
 

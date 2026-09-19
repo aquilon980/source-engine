@@ -143,21 +143,24 @@ void MoveToState::OnUpdate( CCSBot *me )
 							// if we are near the bombsite and there is time left, sneak in (unless all enemies are dead)
 							if (me->GetEnemiesRemaining())
 							{
-								const float plentyOfTime = 15.0f;
-								if (TheCSBots()->GetBombTimeLeft() > plentyOfTime)
-								{
-									// get distance remaining on our path until we reach the bombsite
-									float range = me->GetPathDistanceRemaining();
+								// Sneaking only helps if we can still finish. Estimate
+								// the trip + the defuse (5s with a kit, 10s without) and
+								// only walk when that comfortably fits in the time left;
+								// otherwise run - a quiet loss is still a loss.
+								const float bombTimeLeft = TheCSBots()->GetBombTimeLeft();
+								const float defuseTime = me->HasDefuser() ? 5.0f : 10.0f;
+								const float walkSpeed = me->GetMoveSpeed() * 0.5f;
+								const float pathRange = me->GetPathDistanceRemaining();
+								const float walkEta = (pathRange >= 0.0f && walkSpeed > 0.0f) ? pathRange / walkSpeed : 999.0f;
 
-									const float closeRange = 1500.0f;
-									if (range < closeRange)
-									{
-										me->Walk();
-									}
-									else
-									{
-										me->Run();
-									}
+								const float safetyMargin = 3.0f;
+								if (walkEta + defuseTime + safetyMargin < bombTimeLeft)
+								{
+									me->Walk();
+								}
+								else
+								{
+									me->Run();
 								}
 							}
 							else
@@ -179,15 +182,17 @@ void MoveToState::OnUpdate( CCSBot *me )
 							const Vector *bombPos = me->GetGameState()->GetBombPosition();
 							if (bombPos && !me->IsReloading())
 							{
-								const float defuseRange = 100.0f;		// 50
+								// The engine's +use reaches the C4 from < 96 units
+								// (eye -> bomb) with no line-of-sight requirement at
+								// all (CCSPlayer::FindUseEntity), so don't gate on
+								// IsVisible here - a bomb tucked beside a box is
+								// still defusable, and requiring LOS sent bots
+								// pacing in front of it forever.
+								const float defuseRange = 88.0f;
 								if ((*bombPos - me->EyePosition()).IsLengthLessThan( defuseRange ))
 								{
-									// make sure we can see the bomb
-									if (me->IsVisible( *bombPos ))
-									{
-										me->DefuseBomb();
-										return;
-									}
+									me->DefuseBomb();
+									return;
 								}
 							}
 
