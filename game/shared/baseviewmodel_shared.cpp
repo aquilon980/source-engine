@@ -381,12 +381,15 @@ void CBaseViewModel::SendViewModelMatchingSequence( int sequence )
 #if defined( CLIENT_DLL )
 #include "ivieweffects.h"
 
-ConVar viewmodel_recoil( "viewmodel_recoil", "0.5", FCVAR_ARCHIVE, "Amount of weapon recoil/aimpunch shown on the viewmodel (0 = steady gun, 1.0 = stock).", true, 0.0f, true, 1.0f );
+// Position reset: every viewmodel sits exactly where stock CS:S puts it by
+// default. The feel tweaks below are opt-in via their cvars — the shipped
+// defaults no longer nudge, tilt or dip the gun (see docs/viewmodel-feel.md).
+ConVar viewmodel_recoil( "viewmodel_recoil", "0", FCVAR_ARCHIVE, "Amount of weapon recoil/aimpunch shown on the viewmodel (0 = steady gun, 1.0 = stock).", true, 0.0f, true, 1.0f );
 
 // Viewmodel offset (CS:GO-style): shift the gun laterally off-centre. x is the
 // screen-horizontal axis (negative = left), applied to every weapon in
 // CalcViewModelView so one cvar covers them all. World units.
-ConVar cl_viewmodel_offset_x( "cl_viewmodel_offset_x", "-2", FCVAR_ARCHIVE, "Viewmodel horizontal offset in world units (negative = left).", true, -20.0f, true, 20.0f );
+ConVar cl_viewmodel_offset_x( "cl_viewmodel_offset_x", "0", FCVAR_ARCHIVE, "Viewmodel horizontal offset in world units (negative = left).", true, -20.0f, true, 20.0f );
 #endif
 
 #ifdef CSTRIKE_DLL

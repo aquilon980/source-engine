@@ -43,7 +43,8 @@ CPredictedViewModel::~CPredictedViewModel()
 
 #ifdef CLIENT_DLL
 ConVar cl_wpn_sway_interp( "cl_wpn_sway_interp", "0.1", FCVAR_CLIENTDLL );
-ConVar cl_wpn_sway_scale( "cl_wpn_sway_scale", "0.6", FCVAR_CLIENTDLL|FCVAR_CHEAT );
+// Stock sway (1.0). Lower it for a tighter gun — see docs/viewmodel-feel.md.
+ConVar cl_wpn_sway_scale( "cl_wpn_sway_scale", "1", FCVAR_CLIENTDLL|FCVAR_CHEAT );
 #endif
 
 void CPredictedViewModel::CalcViewModelLag( Vector& origin, QAngle& angles, QAngle& original_angles )
@@ -83,7 +84,8 @@ void CPredictedViewModel::CalcViewModelLag( Vector& origin, QAngle& angles, QAng
 }
 
 #ifdef CLIENT_DLL
-ConVar cl_gunlowerangle( "cl_gunlowerangle", "2", FCVAR_CLIENTDLL );
+// Stock: no airborne dip. Raise cl_gunlowerangle for the CS:GO jump dip.
+ConVar cl_gunlowerangle( "cl_gunlowerangle", "0", FCVAR_CLIENTDLL );
 ConVar cl_gunlowerspeed( "cl_gunlowerspeed", "0.1", FCVAR_CLIENTDLL );
 #endif //CLIENT_DLL
 

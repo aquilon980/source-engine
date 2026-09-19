@@ -1685,7 +1685,8 @@ bool CWeaponCSBase::IsUseable()
 	static ConVar	cl_bob_lower_amt( "cl_bob_lower_amt", "21", FCVAR_ARCHIVE, "The amount the viewmodel lowers when running", true, 5, true, 30 );
 	// Slight roll of the viewmodel into a strafe (velocity-based, see below).
 	// Negative flips which way it leans.
-	static ConVar	cl_viewmodel_strafe_tilt( "cl_viewmodel_strafe_tilt", "1.5", FCVAR_ARCHIVE, "Degrees the viewmodel leans into a full-speed strafe (negative flips the lean)", true, -8.0f, true, 8.0f );
+	// Stock resting pose by default (0 = no lean); opt in with a positive value.
+	static ConVar	cl_viewmodel_strafe_tilt( "cl_viewmodel_strafe_tilt", "0", FCVAR_ARCHIVE, "Degrees the viewmodel leans into a full-speed strafe (negative flips the lean)", true, -8.0f, true, 8.0f );
 
 	//-----------------------------------------------------------------------------
 	// CSO-style viewmodel bob helpers, ported from FJH03/CSSO-NOOFFICIAL-MP
