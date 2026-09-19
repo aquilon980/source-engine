@@ -811,6 +811,13 @@ void CCSBot::UpdateLookAround( bool updateNow )
 	}
 
 	//
+	// Human travel look: scan a flank or over a shoulder, and let the view
+	// wander off the path. Only while actually travelling (see IsTravelling),
+	// and it yields to every real look-at.
+	//
+	UpdateHumanTravelLook();
+
+	//
 	// Human fidget: at round start, walking out with the team, glance at
 	// nearby teammates the way players check who's around them. Only while
 	// safe and actually moving (the hiding branch above owns the still case),

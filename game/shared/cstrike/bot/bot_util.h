@@ -52,6 +52,7 @@ extern ConVar cv_bot_flipout;
 extern ConVar cv_bot_human_strafe;
 extern ConVar cv_bot_tactical_grenades;
 extern ConVar cv_bot_human_fidget;
+extern ConVar cv_bot_human_movement;
 
 #define RAD_TO_DEG( deg ) ((deg) * 180.0 / M_PI)
 #define DEG_TO_RAD( rad ) ((rad) * M_PI / 180.0)

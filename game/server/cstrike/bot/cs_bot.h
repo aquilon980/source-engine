@@ -758,6 +758,8 @@ public:
 	void UpdateFreezetimeFidget( void );								///< human fidget: look around, cycle weapons, shift about during the freeze period
 	bool IsFidgetHoldingWeapon( void ) const;						///< human fidget: true shortly after a fidget weapon swap (keeps the fidget gun out briefly)
 	void FinishFreezetimeFidget( void );								///< human fidget: freeze just ended - stand up, re-arm, maybe break late
+	void UpdateHumanTravelLook( void );								///< human travel: head-check flanks/behind and let the view wander off the path
+	bool IsTravelling( void ) const;								///< human travel: true while walking the map out of combat
 
 	/// @todo Clean up notion of "forward angle" and "look ahead angle"
 	void SetForwardAngle( float angle );							///< define our forward facing
@@ -1059,6 +1061,21 @@ private:
 	float m_lastFidgetSwapTime;									///< human fidget: when we last swapped weapons while fidgeting (holds the fidget gun briefly)
 	float m_freezeBreakDelay;									///< human fidget: staggered freeze-break pause, consumed when the freeze ends
 	bool m_fidgetCrouched;										///< human fidget: true while a fidget duck is held (stood back up at freeze end)
+
+	//- human travel personality (bot_human_movement) -------------------------------------------------
+	float m_walkPace;											///< personal out-of-combat pace multiplier (0.82..1.0)
+	float m_weaveAmp;											///< lateral sway scale while travelling (0 = dead straight)
+	float m_weaveFreq;											///< sway frequency (Hz)
+	float m_weavePhase;											///< sway phase offset, so no two bots sway together
+	float m_lookWanderAmp;										///< degrees of yaw the view wanders off the path
+	float m_lookWanderFreq;										///< view-wander frequency (Hz)
+	float m_lookWanderPhase;									///< view-wander phase offset
+	float m_lookWanderPitchAmp;									///< degrees of pitch wander
+	float m_nextHeadCheckTime;									///< when we may next glance off our path while travelling
+	float m_headCheckChance;									///< 0..1 eagerness for head-checks
+	float m_nextTravelPauseTime;								///< when we may next pause mid-walk
+	float m_travelPauseUntil;									///< while in the future, hold still for a beat
+	float m_travelPauseChance;									///< 0..1 eagerness for mid-walk pauses
 
 	void UpdateTravelDistanceToAllPlayers( void );					///< periodically compute shortest path distance to each player
 	CountdownTimer m_updateTravelDistanceTimer;						///< for throttling travel distance computations
@@ -1921,6 +1938,25 @@ public:
 			else
 			{
 				dist = (area->GetCenter() - fromArea->GetCenter()).Length();
+			}
+
+			// Human travel: give every bot a small, stable, personal preference
+			// for which corridors it likes, so a squad walking the same objective
+			// fans out over different routes instead of filing down one optimal
+			// line. The offset is a hash of (bot, area), so it is identical on
+			// every repath - the bot never flip-flops mid-journey. Kept small
+			// (<=12%) and skipped in combat / when hurrying, so it changes which
+			// route is chosen, never how fast the objective is reached.
+			if (cv_bot_human_movement.GetBool() && !m_bot->IsAttacking() && !m_bot->IsHurrying())
+			{
+				unsigned int h = (unsigned int)m_bot->GetID() * 2654435761u;
+				h ^= (unsigned int)area->GetID() * 40503u;
+				h ^= h >> 13;
+				h *= 0x5bd1e995u;
+				h ^= h >> 15;
+
+				float jitter = (float)( h & 0xFFFF ) / 65535.0f;	// 0..1
+				dist *= (1.0f + 0.12f * jitter);
 			}
 
 			// compute distance travelled along path so far

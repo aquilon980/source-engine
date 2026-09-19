@@ -1669,6 +1669,30 @@ CCSBot::PathResult CCSBot::UpdatePathMovement( bool allowSpeedChange )
 	Vector adjustedGoal = m_goalPosition;
 
 	//
+	// Human travel: a slight lateral weave so we don't trace a perfect line.
+	// Applied BEFORE the feelers, so the obstacle reflex can steer us back off
+	// the sway if it would walk us into geometry. Out-of-combat only, and
+	// never near a jump or the end of the path.
+	//
+	if (cv_bot_human_movement.GetBool() && IsTravelling() && !nearEndOfPath &&
+		!IsNearJump() && m_weaveAmp > 0.05f)
+	{
+		Vector toGoal = adjustedGoal - myOrigin;
+		Vector2D flat( toGoal.x, toGoal.y );
+		if (flat.NormalizeInPlace() > 0.0f)
+		{
+			Vector2D lat( -flat.y, flat.x );
+			float t = gpGlobals->curtime;
+			float offset = 8.0f * m_weaveAmp *
+				( BotSIN( 360.0f * m_weaveFreq * t + m_weavePhase ) +
+				  0.5f * BotSIN( 360.0f * (m_weaveFreq * 2.3f) * t + m_weavePhase ) );
+
+			adjustedGoal.x += lat.x * offset;
+			adjustedGoal.y += lat.y * offset;
+		}
+	}
+
+	//
 	// Use short "feelers" to veer away from close-range obstacles
 	// Feelers come from our ankles, just above StepHeight, so we avoid short walls, too
 	// Don't use feelers if very near the end of the path, or about to jump
@@ -1716,6 +1740,32 @@ CCSBot::PathResult CCSBot::UpdatePathMovement( bool allowSpeedChange )
 		// we're done waiting for our friend to move
 		m_isWaitingBehindFriend = false;
 		ResetStuckMonitor();
+	}
+
+	//
+	// Human travel: the odd brief pause at a corner, like a player checking
+	// something. Out-of-combat only, never near a jump or the end of the path.
+	//
+	if (cv_bot_human_movement.GetBool() && IsTravelling() && !nearEndOfPath &&
+		!IsNearJump() && !isWaitingForLadder)
+	{
+		// brief pause: hold still for a beat, then resume the same path.
+		// ResetStuckMonitor() each frame (exactly what the stock Wait() path
+		// does) so a deliberate stop never registers as being stuck.
+		if (gpGlobals->curtime < m_travelPauseUntil)
+		{
+			ResetStuckMonitor();
+			ClearMovement();
+			return PROGRESSING;
+		}
+
+		if (gpGlobals->curtime >= m_nextTravelPauseTime)
+		{
+			m_nextTravelPauseTime = gpGlobals->curtime + RandomFloat( 8.0f, 20.0f );
+
+			if (RandomFloat( 0.0f, 1.0f ) < m_travelPauseChance)
+				m_travelPauseUntil = gpGlobals->curtime + RandomFloat( 0.2f, 0.5f );
+		}
 	}
 
 	//

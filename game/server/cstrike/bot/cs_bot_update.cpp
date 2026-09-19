@@ -18,6 +18,13 @@
 //-----------------------------------------------------------------------------------------------------------
 float CCSBot::GetMoveSpeed( void )
 {
+	// Human travel: everyone walks the map at their own pace.  The engine
+	// normalises the move vector and only clamps it at the run/walk max, so a
+	// forwardmove below max becomes a genuinely slower speed - this is a real
+	// pace knob, not a no-op.  Combat and ladders always use full speed.
+	if ( cv_bot_human_movement.GetBool() && IsTravelling() )
+		return 250.0f * m_walkPace;
+
 	return 250.0f;
 }
 
@@ -226,6 +233,16 @@ void CCSBot::Upkeep( void )
 
 			m_lookYaw += driftAmplitude * BotCOS( 33.0f * gpGlobals->curtime );
 			m_lookPitch += driftAmplitude * BotSIN( 13.0f * gpGlobals->curtime );
+
+			// Human travel: add a personal, larger off-path wander on top of the
+			// stock drift. Absolute-time sines (not accumulated) so it can't run
+			// away, and every bot has its own amplitude/frequency/phase.
+			if (cv_bot_human_movement.GetBool() && IsTravelling() && m_lookWanderAmp > 0.5f)
+			{
+				const float t = gpGlobals->curtime;
+				m_lookYaw += m_lookWanderAmp * BotSIN( 360.0f * m_lookWanderFreq * t + m_lookWanderPhase );
+				m_lookPitch += m_lookWanderPitchAmp * BotSIN( 360.0f * (m_lookWanderFreq * 0.6f) * t + m_lookWanderPhase );
+			}
 		}
 	}
 
@@ -339,6 +356,72 @@ void CCSBot::FinishFreezetimeFidget( void )
 		Wait( m_freezeBreakDelay );
 		m_freezeBreakDelay = 0.0f;
 	}
+}
+
+
+//--------------------------------------------------------------------------------------------------------------
+/**
+ * True while we are simply walking the map out of combat: not attacking, not
+ * blind, not hiding, not on a ladder, not mid-jump, and actually on a path.
+ * Everything that makes bots travel like people keys off this, so it can never
+ * touch combat aiming, ladder handling or jump timing.
+ */
+bool CCSBot::IsTravelling( void ) const
+{
+	return ( HasPath() &&
+			 !IsAttacking() &&
+			 !IsBlind() &&
+			 !IsAtHidingSpot() &&
+			 !IsUsingLadder() &&
+			 !IsNearJump() &&
+			 !IsCrouching() );
+}
+
+//--------------------------------------------------------------------------------------------------------------
+/**
+ * Human travel look.
+ *
+ * Stock bots stare down their path while they walk. Real players scan: they
+ * glance at a flank or over a shoulder every few seconds, and their view
+ * wanders a little off the route the whole time. Both are added as *offsets*
+ * to the look-ahead angle so the existing spring still does the actual
+ * turning (no snapping), and both are gated to travel only, PRIORITY_LOW, and
+ * skipped whenever a real look-at is active - combat, noise and hiding stares
+ * always win.
+ *
+ * The wander is a sum of two sines at the bot's own frequency/phase, so no two
+ * bots scan in sync. The head-check picks a bearing behind or to the side and
+ * holds it for a beat via the normal SetLookAt machinery.
+ */
+void CCSBot::UpdateHumanTravelLook( void )
+{
+	if ( !cv_bot_human_movement.GetBool() || !IsTravelling() )
+		return;
+
+	// let a real look-at (enemy, noise, hiding spot, teammate glance) own the view
+	if ( HasLookAtTarget() )
+		return;
+
+	// Occasional head-check: glance at a flank or behind for a beat. Cadence is
+	// personal (2-6s), the bearing is never straight down the path, and only
+	// some bots do it at all.
+	if ( gpGlobals->curtime < m_nextHeadCheckTime )
+		return;
+
+	m_nextHeadCheckTime = gpGlobals->curtime + RandomFloat( 2.0f, 6.0f );
+
+	if ( RandomFloat( 0.0f, 1.0f ) > m_headCheckChance )
+		return;
+
+	// pick a bearing 70-180 degrees off our path heading, either side, and a
+	// spot a few hundred units out at roughly eye height
+	float yaw = m_lookAheadAngle + RandomFloat( 70.0f, 180.0f ) * ( (RandomInt(0,1) == 0) ? -1.0f : 1.0f );
+	Vector dir;
+	AngleVectors( QAngle( 0.0f, yaw, 0.0f ), &dir );
+	Vector target = EyePositionConst() + dir * RandomFloat( 300.0f, 700.0f );
+	target.z += RandomFloat( -25.0f, 25.0f );
+
+	SetLookAt( "Travel head-check", target, PRIORITY_LOW, RandomFloat( 0.4f, 1.1f ), true );
 }
 
 

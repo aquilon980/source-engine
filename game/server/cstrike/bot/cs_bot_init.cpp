@@ -82,6 +82,7 @@ ConVar cv_bot_flipout( "bot_flipout", "0", FCVAR_REPLICATED | FCVAR_CHEAT, "If n
 ConVar cv_bot_human_strafe( "bot_human_strafe", "1", FCVAR_REPLICATED, "If nonzero, bots make reactive, human-like strafing decisions in combat (juke when tracked, hold still to shoot)." );
 ConVar cv_bot_tactical_grenades( "bot_tactical_grenades", "1", FCVAR_REPLICATED, "If nonzero, bots use grenades tactically in combat: flash setups before re-peeking, HE to flush entrenched enemies, smoke for cover when outnumbered or scoped." );
 ConVar cv_bot_human_fidget( "bot_human_fidget", "1", FCVAR_REPLICATED, "If nonzero, bots act human outside combat: look around and cycle weapons during freezetime, glance at teammates while walking out at round start, and stagger their freeze-break so the team doesn't move as one." );
+ConVar cv_bot_human_movement( "bot_human_movement", "1", FCVAR_REPLICATED, "If nonzero, bots move and look like people out of combat: head-checks on flanks and behind, a personal walking pace that drifts, a slight weave instead of a perfect line, and the odd pause at a corner. 0 restores stock straight-line, eyes-forward travel." );
 
 
 extern void FinishClientPutInServer( CCSPlayer *pPlayer );
@@ -230,6 +231,30 @@ void CCSBot::ResetValues( void )
 	// staggered freeze-break: most bots go on time, some hesitate like humans
 	// tabbing back in or finishing a buy click
 	m_freezeBreakDelay = (RandomFloat( 0.0f, 1.0f ) < 0.65f) ? 0.0f : RandomFloat( 0.15f, 0.9f );
+
+	// human travel personality, fresh every spawn. Every bot gets its own pace,
+	// sway, view-wander and habits, so a squad walking the same route never
+	// marches in lockstep. 0 amp on any of these just means "doesn't do it".
+	m_walkPace = RandomFloat( 0.82f, 1.0f );
+	m_weaveAmp = RandomFloat( 0.0f, 1.0f );
+	m_weaveAmp *= m_weaveAmp * RandomFloat( 0.0f, 4.0f );	// most weave little, a few noticeably
+	m_weaveFreq = RandomFloat( 0.7f, 1.5f );
+	m_weavePhase = RandomFloat( 0.0f, 6.283185f );
+
+	m_lookWanderAmp = RandomFloat( 0.0f, 1.0f );
+	m_lookWanderAmp *= m_lookWanderAmp * RandomFloat( 3.0f, 14.0f );	// degrees of scan
+	m_lookWanderFreq = RandomFloat( 0.15f, 0.5f );
+	m_lookWanderPhase = RandomFloat( 0.0f, 6.283185f );
+	m_lookWanderPitchAmp = RandomFloat( 0.0f, 3.0f );
+
+	m_nextHeadCheckTime = 0.0f;
+	m_headCheckChance = RandomFloat( 0.0f, 1.0f );
+	m_headCheckChance *= m_headCheckChance;					// most glance occasionally, a few rarely
+
+	m_nextTravelPauseTime = 0.0f;
+	m_travelPauseUntil = 0.0f;
+	m_travelPauseChance = RandomFloat( 0.0f, 1.0f );
+	m_travelPauseChance *= m_travelPauseChance * 0.5f;		// pauses are the exception
 
 	for( int w=0; w<MAX_PLAYERS; ++w )
 	{
