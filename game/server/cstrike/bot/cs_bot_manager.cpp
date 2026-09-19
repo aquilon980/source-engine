@@ -959,6 +959,12 @@ bool CCSBotManager::BotAddCommand( int team, bool isFromConsole, const char *pro
 		}
 	}
 
+	// mixed difficulty (bot_difficulty 4): every bot rolls its own level
+	if ( difficulty == NUM_DIFFICULTY_LEVELS )
+	{
+		difficulty = (BotDifficultyType)RandomInt( BOT_EASY, BOT_EXPERT );
+	}
+
 	if ( profileName && *profileName )
 	{
 		// in career, ignore humans, since we want to add anyway

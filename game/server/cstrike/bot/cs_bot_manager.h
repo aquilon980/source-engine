@@ -146,8 +146,11 @@ public:
 			return BOT_NORMAL;
 		if (cv_bot_difficulty.GetFloat() < 2.9f)
 			return BOT_HARD;
+		if (cv_bot_difficulty.GetFloat() < 3.9f)
+			return BOT_EXPERT;
 
-		return BOT_EXPERT;
+		// 4 = mixed: every bot rolls its own difficulty in BotAddCommand
+		return NUM_DIFFICULTY_LEVELS;
 	}
 
 	// the supported game scenarios ------------------------------------------------------------------------------

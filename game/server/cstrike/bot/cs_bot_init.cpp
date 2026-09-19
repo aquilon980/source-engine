@@ -51,7 +51,7 @@ ConVar cv_bot_traceview( "bot_traceview", "0", FCVAR_REPLICATED | FCVAR_CHEAT, "
 ConVar cv_bot_stop( "bot_stop", "0", FCVAR_REPLICATED | FCVAR_CHEAT, "If nonzero, immediately stops all bot processing." );
 ConVar cv_bot_show_nav( "bot_show_nav", "0", FCVAR_REPLICATED | FCVAR_CHEAT, "For internal testing purposes." );
 ConVar cv_bot_walk( "bot_walk", "0", FCVAR_REPLICATED, "If nonzero, bots can only walk, not run." );
-ConVar cv_bot_difficulty( "bot_difficulty", "1", FCVAR_REPLICATED, "Defines the skill of bots joining the game.  Values are: 0=easy, 1=normal, 2=hard, 3=expert." );
+ConVar cv_bot_difficulty( "bot_difficulty", "1", FCVAR_REPLICATED, "Defines the skill of bots joining the game.  Values are: 0=easy, 1=normal, 2=hard, 3=expert, 4=mixed (each bot gets a random difficulty)." );
 ConVar cv_bot_debug( "bot_debug", "0", FCVAR_REPLICATED | FCVAR_CHEAT, "For internal testing purposes." );
 ConVar cv_bot_debug_target( "bot_debug_target", "0", FCVAR_REPLICATED | FCVAR_CHEAT, "For internal testing purposes." );
 ConVar cv_bot_quota( "bot_quota", "0", FCVAR_REPLICATED | FCVAR_NOTIFY, "Determines the total number of bots in the game." );

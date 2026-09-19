@@ -109,7 +109,7 @@ void CCreateMultiplayerGameServerPage::EnableBots( KeyValues *data )
 
 	int difficulty = data->GetInt( "bot_difficulty", 0 );
 	difficulty = max( difficulty, 0 );
-	difficulty = min( 3, difficulty );
+	difficulty = min( 4, difficulty );
 
 	char buttonName[64];
 	Q_snprintf( buttonName, sizeof( buttonName ), "SkillLevel%d", difficulty );
@@ -140,7 +140,7 @@ void CCreateMultiplayerGameServerPage::OnApplyChanges()
 		bot_quota.SetValue( quota );
 
 		int difficulty = 0;
-		for ( int i=0; i<4; ++i )
+		for ( int i=0; i<5; ++i )
 		{
 			char buttonName[64];
 			Q_snprintf( buttonName, sizeof( buttonName ), "SkillLevel%d", i );
@@ -307,6 +307,7 @@ void CCreateMultiplayerGameServerPage::OnCheckButtonChecked()
 	SetControlEnabled("SkillLevel1", m_pEnableBotsCheck->IsSelected());
 	SetControlEnabled("SkillLevel2", m_pEnableBotsCheck->IsSelected());
 	SetControlEnabled("SkillLevel3", m_pEnableBotsCheck->IsSelected());
+	SetControlEnabled("SkillLevel4", m_pEnableBotsCheck->IsSelected());
 	SetControlEnabled("BotQuotaCombo", m_pEnableBotsCheck->IsSelected());
 	SetControlEnabled("BotQuotaLabel", m_pEnableBotsCheck->IsSelected());
 	SetControlEnabled("BotDifficultyLabel", m_pEnableBotsCheck->IsSelected());

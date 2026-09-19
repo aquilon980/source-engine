@@ -669,8 +669,8 @@ const BotProfile *BotProfileManager::GetRandomProfile( BotDifficultyType difficu
 	{
 		const BotProfile *profile = m_profileList[ it ];
 
-		// Match difficulty
-		if ( !profile->IsDifficulty( difficulty ) )
+		// Match difficulty (NUM_DIFFICULTY_LEVELS = mixed/any: accept every profile)
+		if ( difficulty != NUM_DIFFICULTY_LEVELS && !profile->IsDifficulty( difficulty ) )
 			continue;
 
 		// Prevent duplicate names
