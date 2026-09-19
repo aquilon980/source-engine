@@ -1116,6 +1116,8 @@ CStuckMonitor::CStuckMonitor( void )
 	m_isStuck = false;
 	m_avgVelIndex = 0;
 	m_avgVelCount = 0;
+	m_lastTime = 0.0f;
+	m_lastCentroid = vec3_origin;
 }
 
 /**
@@ -1126,6 +1128,8 @@ void CStuckMonitor::Reset( void )
 	m_isStuck = false;
 	m_avgVelIndex = 0;
 	m_avgVelCount = 0;
+	m_lastTime = 0.0f;
+	m_lastCentroid = vec3_origin;
 }
 
 //--------------------------------------------------------------------------------------------------------------

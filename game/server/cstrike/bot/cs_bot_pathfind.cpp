@@ -246,7 +246,10 @@ void CCSBot::ComputeLadderEndpoint( bool isAscending )
 		to = m_pathLadder->m_bottom;
 	}
 
-	UTIL_TraceLine( from, m_pathLadder->m_bottom, MASK_PLAYERSOLID_BRUSHONLY, NULL, COLLISION_GROUP_NONE, &result );
+	// trace towards the actual endpoint we care about (m_top ascending,
+	// m_bottom descending). This used to always trace to m_bottom, so the
+	// ascending trim never tested the ceiling it was meant to find.
+	UTIL_TraceLine( from, to, MASK_PLAYERSOLID_BRUSHONLY, NULL, COLLISION_GROUP_NONE, &result );
 
 	if (result.fraction == 1.0f)
 		m_pathLadderEnd = to.z;
@@ -1547,7 +1550,12 @@ CCSBot::PathResult CCSBot::UpdatePathMovement( bool allowSpeedChange )
 			{
 				Crouch();
 				didCrouch = true;
-				ResetStuckMonitor();
+				// Only clear the stuck monitor while we're not stuck. Clearing
+				// it every frame we're near a duct also reset the 4s give-up
+				// timer (m_areaEnteredTimestamp), so a bot wedged in a vent
+				// could never escape - it just sat there forever.
+				if (!m_isStuck)
+					ResetStuckMonitor();
 				break;
 			}
 		}

@@ -52,6 +52,13 @@ void EscapeFromBombState::OnUpdate( CCSBot *me )
 		FarAwayFromPositionFunctor func( *bombPos );
 		CNavArea *goalArea = FindMinimumCostArea( me->GetLastKnownArea(), func );
 
+		// FindMinimumCostArea returns NULL when no nav areas are loaded at all
+		if (goalArea == NULL)
+		{
+			me->Idle();
+			return;
+		}
+
 		// if this fails, we'll try again next time
 		me->ComputePath( goalArea->GetCenter(), FASTEST_ROUTE );
 	}

@@ -361,8 +361,14 @@ void IdleState::OnUpdate( CCSBot *me )
 								return;
 							}
 						}
+
+						// A zone with no usable area leaves us with nowhere to
+						// search. Don't assert (it fires per-frame on maps whose
+						// bomb zones aren't fully nav'd) - fall back to hunting
+						// so the bot keeps moving and may stumble onto the bomb.
+						me->Hunt();
+						return;
 					}
-					AssertMsg( 0, "A CT bot doesn't know what to do while the bomb is planted!\n" );
 				}
 
 

@@ -53,7 +53,7 @@ void CCSBot::Upkeep( void )
 		val = RandomInt( 0, 2 );
 		if ( val == 0 )
 			Crouch();
-		else ( val == 1 );
+		else if ( val == 1 )
 			StandUp();
 	
 		return;

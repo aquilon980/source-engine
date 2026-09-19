@@ -196,7 +196,10 @@ void CCSBot::RespondToRadioCommands( void )
 		}
 
 		default:
-			// ignore all other radio commands for now
+			// ignore all other radio commands for now - but still consume it,
+			// or it stays pending forever and pins the radio-silence timer
+			// (ResetRadioSilenceDuration runs above), suppressing timed chatter
+			m_lastRadioCommand = RADIO_INVALID;
 			return;
 	}
 

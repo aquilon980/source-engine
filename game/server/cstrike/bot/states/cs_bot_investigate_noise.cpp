@@ -19,15 +19,21 @@
  */
 void InvestigateNoiseState::AttendCurrentNoise( CCSBot *me )
 {
-	if (!me->IsNoiseHeard() && me->GetNoisePosition())
+	// no noise to attend - bail. (This guard used to be inverted: with no
+	// noise heard it fell through and dereferenced the NULL noise position.)
+	const Vector *noisePos = me->GetNoisePosition();
+	if (noisePos == NULL)
+	{
+		me->Idle();
 		return;
+	}
 
 	// remember where the noise we heard was
-	m_checkNoisePosition = *me->GetNoisePosition();
+	m_checkNoisePosition = *noisePos;
 
 	// tell our teammates (unless the noise is obvious, like gunfire)
 	if (me->IsWellPastSafe() && me->HasNotSeenEnemyForLongTime() && me->GetNoisePriority() != PRIORITY_HIGH)
-		me->GetChatter()->HeardNoise( *me->GetNoisePosition() );
+		me->GetChatter()->HeardNoise( *noisePos );
 
 	// figure out how to get to the noise		
 	me->PrintIfWatched( "Attending to noise...\n" );

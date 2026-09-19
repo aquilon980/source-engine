@@ -1386,16 +1386,24 @@ CCSPlayer *CCSBot::FindMostDangerousThreat( void )
 							break;
 					}
 
-					// shift lower half down a notch
-					for( int k=threatCount-1; k>=j; --k )
-						threat[k+1] = threat[k];
+					// if the list is full and this threat is farther than every
+					// one in it, it doesn't make the cut. (Without this the shift
+					// below wrote threat[MAX_THREATS] - past the end of the array.)
+					if (threatCount < MAX_THREATS || j < MAX_THREATS)
+					{
+						// shift lower half down a notch, dropping the farthest
+						// threat when the list is already full
+						int last = MIN( threatCount, MAX_THREATS - 1 );
+						for( int k=last; k>j; --k )
+							threat[k] = threat[k-1];
 
-					// insert threat into sorted list
-					threat[j].enemy = player;
-					threat[j].range = distSq;
+						// insert threat into sorted list
+						threat[j].enemy = player;
+						threat[j].range = distSq;
 
-					if (threatCount < MAX_THREATS)
-						++threatCount;
+						if (threatCount < MAX_THREATS)
+							++threatCount;
+					}
 				}
 			}
 		}

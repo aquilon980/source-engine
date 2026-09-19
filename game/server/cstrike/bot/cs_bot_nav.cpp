@@ -726,11 +726,10 @@ void CCSBot::StrafeAwayFromPosition( const Vector &pos )
  */
 void CCSBot::Wiggle( void )
 {
-	if (IsCrouching())
-	{
-		return;
-	}
-
+	// NOTE: we deliberately wiggle while crouched too. Bots get wedged at duct
+	// lips and crouch-area seams, and bailing here meant a crouched bot could
+	// not strafe or back out at all. (Jump() already refuses while ducked, so
+	// the jump below is safe.)
 	// for wiggling
 	if (m_wiggleTimer.IsElapsed())
 	{
