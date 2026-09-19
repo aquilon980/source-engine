@@ -286,6 +286,11 @@ void CHudElement::SetHiddenBits( int iBits )
 //-----------------------------------------------------------------------------
 bool CHudElement::ShouldDraw( void )
 {
+	// Seb: the live main-menu background (docs/menu-background.md) is a map
+	// behind the menu, not a game — never draw HUD elements over it.
+	if ( engine->IsLevelMainMenuBackground() )
+		return false;
+
 	bool bShouldDraw = ( !gHUD.IsHidden( m_iHiddenBits ) );
 
 	if ( bShouldDraw )

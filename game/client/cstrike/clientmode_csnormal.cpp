@@ -343,6 +343,13 @@ void ClientModeCSNormal::Update()
 	// Override the hud's visibility if this is a logo (like E3 demo) map.
 	if ( CSGameRules() && CSGameRules()->IsLogoMap() )
 		m_pViewport->SetVisible( false );
+	else if ( engine->IsLevelMainMenuBackground() )
+	{
+		// Seb: live main-menu background (docs/menu-background.md) is a map
+		// shown behind the menu — no HUD, radar, team menu or MOTD over it.
+		// Same lever the logo-map path uses to hide the whole client viewport.
+		m_pViewport->SetVisible( false );
+	}
 }
 
 
